@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import threading
+
 import rospy
 from std_msgs.msg import String, Bool
 from enum import Enum, auto
@@ -14,7 +16,7 @@ TTS_TOPIC = "/chef_robot_assistant/tts"
 TTS_DONE_TOPIC = "/chef_robot_assistant/tts_done"
 
 # Affirmative responses for "yes"
-AFFIRMATIVE_RESPONSES = {"yes", "yea", "yeah", "ya"}
+AFFIRMATIVE_RESPONSES = {"yes", "yea", "yeah", "ya", "yaa"}
 
 # Questions
 QUESTION_ACTIVATE_SCANNING = (
@@ -55,7 +57,8 @@ class InteractionManager:
         self.state = State.IDLE
         self.sub_state = SubState.PROCESSING
         self.last_user_response = None
-        self.tts_done = False
+        self._tts_done_event = threading.Event() # if set, this means text-to-speech is done
+        self._state_lock = threading.Lock() # a lock to prevent data race on self.last_user_response
 
         # Publishers
         self.tts_pub = rospy.Publisher(
@@ -81,20 +84,27 @@ class InteractionManager:
         self.run()
 
     def on_user_command(self, msg: String):
-        if self.sub_state == SubState.LISTENING:
-            self.last_user_response = msg.data.strip().lower()
-            rospy.loginfo(f"Heard user: '{self.last_user_response}'")
-            self.sub_state = SubState.PROCESSING
+        with self._state_lock:
+            if self.sub_state == SubState.LISTENING:
+                raw = msg.data.strip().lower().rstrip(".?!,;")
+                if raw in AFFIRMATIVE_RESPONSES:
+                    self.last_user_response = "yes"
+                else:
+                    self.last_user_response = raw
+                rospy.loginfo(f"Heard user: '{self.last_user_response}'")
+                self.sub_state = SubState.PROCESSING
 
     def on_tts_done(self, msg: Bool):
-        if self.sub_state == SubState.SPEAKING:
-            rospy.loginfo("TTS done")
-            self.tts_done = True
+        with self._state_lock:
+            if self.sub_state == SubState.SPEAKING:
+                rospy.loginfo("TTS done")
+                self._tts_done_event.set()
 
     def speak(self, text: str):
         rospy.loginfo(f"Speaking: {text}")
-        self.tts_done = False
-        self.sub_state = SubState.SPEAKING
+        with self._state_lock:
+            self._tts_done_event.clear()
+            self.sub_state = SubState.SPEAKING
         msg = String(data=text)
 
         # Wait for at least one subscriber to connect so the message
@@ -110,21 +120,27 @@ class InteractionManager:
         rospy.loginfo("Speaking is done.")
 
     def wait_for_tts(self):
-        while not rospy.is_shutdown() and not self.tts_done:
+        while not rospy.is_shutdown() and not self._tts_done_event.is_set():
             rospy.sleep(0.1)
-        self.tts_done = False
+        self._tts_done_event.clear()
 
     def wait_for_user_response(self):
-        self.last_user_response = None
-        self.sub_state = SubState.LISTENING
+        with self._state_lock:
+            self.last_user_response = None
+            self.sub_state = SubState.LISTENING
         wait_start = rospy.Time.now()
-        while not rospy.is_shutdown() and self.last_user_response is None:
+        while not rospy.is_shutdown():
+            with self._state_lock:
+                response = self.last_user_response
+            if response is not None:
+                return response
             if (rospy.Time.now() - wait_start).to_sec() > WAIT_DURATION_FOR_ANSWER:
                 rospy.logwarn(f"No user response received after {WAIT_DURATION_FOR_ANSWER}s, treating as declined")
-                self.sub_state = SubState.PROCESSING
+                with self._state_lock:
+                    self.sub_state = SubState.PROCESSING
                 return ""
             rospy.sleep(0.1)
-        return self.last_user_response
+        return None
 
     def run(self):
         rate = rospy.Rate(10)
