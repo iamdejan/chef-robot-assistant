@@ -1,0 +1,8 @@
+<launch>
+  <node
+    pkg="chef_robot_assistant"
+    type="audio_listener_example.py"
+    name="audio_listener_example"
+    output="screen"
+  />
+</launch>
