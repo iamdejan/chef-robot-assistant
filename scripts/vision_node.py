@@ -11,19 +11,22 @@ from PIL import Image as PILImage
 from PIL import ImageTk
 
 
+NODE_NAME = "vision_node"
+
+
 class WebcamROSNode:
     def __init__(self, window):
         self.window = window
-        self.window.title("ROS Webcam Stream")
+        self.window.title("Webcam Stream")
 
         # ROS setup
-        rospy.init_node('webcam_gui_node')
+        rospy.init_node(NODE_NAME)
 
         self.bridge = CvBridge()
 
         # Publisher
         self.image_pub = rospy.Publisher(
-            '/webcam/image_raw',
+            '/chef_robot_assistant/image_raw',
             Image,
             queue_size=10
         )
@@ -119,7 +122,7 @@ class WebcamROSNode:
             rospy.loginfo(f"Saved {filename}")
 
     def close(self):
-        rospy.loginfo("Shutting down webcam node")
+        rospy.loginfo(f"Shutting down {NODE_NAME}")
 
         if self.cap.isOpened():
             self.cap.release()

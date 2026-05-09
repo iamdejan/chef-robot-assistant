@@ -13,9 +13,9 @@ from transformers import pipeline
 
 class AudioListenerNode:
     def __init__(self):
-        rospy.init_node("audio_listener_example")
+        rospy.init_node("speech_node")
         self.publisher = rospy.Publisher(
-            "/user_command",
+            "/chef_robot_assistant/user_command",
             String,
             queue_size=10
         )
@@ -29,7 +29,7 @@ class AudioListenerNode:
             device=0 if self._gpu_available() else -1
         )
 
-        rospy.loginfo("Audio Listener Node Ready")
+        rospy.loginfo("Ready")
 
         self.sample_rate = 16000
         self.record_seconds = 5
