@@ -1,0 +1,8 @@
+<launch>
+  <node
+    pkg="chef_robot_assistant"
+    type="text_to_speech_node.py"
+    name="text_to_speech_node"
+    output="screen"
+  />
+</launch>

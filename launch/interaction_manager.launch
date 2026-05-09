@@ -1,0 +1,8 @@
+<launch>
+  <node
+    pkg="chef_robot_assistant"
+    type="interaction_manager.py"
+    name="interaction_manager"
+    output="screen"
+  />
+</launch>

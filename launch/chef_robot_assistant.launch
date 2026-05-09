@@ -1,0 +1,33 @@
+<launch>
+  <!-- Speech recognition node -->
+  <node
+    pkg="chef_robot_assistant"
+    type="speech_node.py"
+    name="speech_node"
+    output="screen"
+  />
+
+  <!-- Text-to-speech node -->
+  <node
+    pkg="chef_robot_assistant"
+    type="text_to_speech_node.py"
+    name="text_to_speech_node"
+    output="screen"
+  />
+
+  <!-- Interaction manager node -->
+  <node
+    pkg="chef_robot_assistant"
+    type="interaction_manager.py"
+    name="interaction_manager"
+    output="screen"
+  />
+
+  <!-- Vision node -->
+  <node
+    pkg="chef_robot_assistant"
+    type="vision_node.py"
+    name="vision_node"
+    output="screen"
+  />
+</launch>
