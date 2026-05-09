@@ -1,0 +1,6 @@
+string dish_name
+string description
+---
+bool success
+string image_path
+string message

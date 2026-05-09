@@ -1,0 +1,9 @@
+chef_robot_assistant:
+  camera_topic: "/camera/image_raw"
+  camera_frame_topic_out: "/chef_robot_assistant/image_raw"
+  detection_confidence_threshold: 0.5
+  capture_duration_sec: 3.0
+  min_ingredient_count: 2
+  speech_retry_limit: 3
+  default_cuisine: "malay"
+  image_generation_enabled: true

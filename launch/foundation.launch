@@ -1,0 +1,38 @@
+<launch>
+  <rosparam command="load" file="$(find chef_robot_assistant)/config/robot_config.yaml" />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="interaction_manager.py"
+    name="interaction_manager"
+    output="screen"
+  />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="vision_node.py"
+    name="vision_node"
+    output="screen"
+  />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="speech_node.py"
+    name="speech_node"
+    output="screen"
+  />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="recipe_node.py"
+    name="recipe_node"
+    output="screen"
+  />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="media_node.py"
+    name="media_node"
+    output="screen"
+  />
+</launch>
