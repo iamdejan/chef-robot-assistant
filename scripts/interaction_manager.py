@@ -6,6 +6,7 @@ from enum import Enum, auto
 
 
 NODE_NAME = "interaction_manager"
+WAIT_DURATION_FOR_ANSWER = 15 # in seconds
 
 # Topics
 USER_COMMAND_TOPIC = "/chef_robot_assistant/user_command"
@@ -116,7 +117,12 @@ class InteractionManager:
     def wait_for_user_response(self):
         self.last_user_response = None
         self.sub_state = SubState.LISTENING
+        wait_start = rospy.Time.now()
         while not rospy.is_shutdown() and self.last_user_response is None:
+            if (rospy.Time.now() - wait_start).to_sec() > WAIT_DURATION_FOR_ANSWER:
+                rospy.logwarn(f"No user response received after {WAIT_DURATION_FOR_ANSWER}s, treating as declined")
+                self.sub_state = SubState.PROCESSING
+                return ""
             rospy.sleep(0.1)
         return self.last_user_response
 
