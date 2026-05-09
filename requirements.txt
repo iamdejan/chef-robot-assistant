@@ -4,3 +4,4 @@
 inference
 numpy
 opencv-python
+python-dotenv

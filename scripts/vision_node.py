@@ -8,6 +8,7 @@ from collections import deque
 import rospy
 from cv_bridge import CvBridge
 from cv_bridge import CvBridgeError
+from dotenv import dotenv_values
 from sensor_msgs.msg import Image
 
 from chef_robot_assistant.srv import DetectIngredients
@@ -69,7 +70,9 @@ class VisionNode(object):
         self.vision_frame_stale_timeout_sec = float(
             self._param("vision_frame_stale_timeout_sec", 2.0)
         )
-        self.roboflow_api_key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
+        self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.dotenv_path = os.path.join(self.repo_root, ".env")
+        self.roboflow_api_key = ""
 
         self.latest_frame_stamp = None
         self.latest_frame_error = ""
@@ -121,27 +124,27 @@ class VisionNode(object):
                 self.model_error = dependency_error
             elif not self.vision_model_id:
                 self.model_error = "vision_model_id is not set"
-            elif not self.roboflow_api_key:
-                self.model_error = "ROBOFLOW_API_KEY is not set in the environment"
             else:
-                try:
-                    self.model = get_model(
-                        model_id=self.vision_model_id,
-                        api_key=self.roboflow_api_key
-                    )
-                    self.model_error = ""
-                    rospy.loginfo(
-                        "Loaded Roboflow model %s via local cache",
-                        self.vision_model_id
-                    )
-                except Exception as exc:
-                    self.model = None
-                    self.model_error = (
-                        "failed to initialize Roboflow model {0}: {1}".format(
-                            self.vision_model_id,
-                            exc
+                self.roboflow_api_key, self.model_error = self._read_roboflow_api_key()
+                if self.roboflow_api_key:
+                    try:
+                        self.model = get_model(
+                            model_id=self.vision_model_id,
+                            api_key=self.roboflow_api_key
                         )
-                    )
+                        self.model_error = ""
+                        rospy.loginfo(
+                            "Loaded Roboflow model %s via local cache",
+                            self.vision_model_id
+                        )
+                    except Exception as exc:
+                        self.model = None
+                        self.model_error = (
+                            "failed to initialize Roboflow model {0}: {1}".format(
+                                self.vision_model_id,
+                                exc
+                            )
+                        )
 
             if self.model is None and log_error and self.model_error:
                 rospy.logerr(self.model_error)
@@ -159,6 +162,26 @@ class VisionNode(object):
                 "roboflow inference import failed: {0}".format(ROBOFLOW_IMPORT_ERROR)
             )
         return "; ".join(errors)
+
+    def _read_roboflow_api_key(self):
+        if not os.path.isfile(self.dotenv_path):
+            return "", "dotenv file not found at {0}".format(self.dotenv_path)
+
+        try:
+            dotenv_map = dotenv_values(self.dotenv_path)
+        except Exception as exc:
+            return "", "failed to read dotenv file {0}: {1}".format(
+                self.dotenv_path,
+                exc
+            )
+
+        api_key = str(dotenv_map.get("ROBOFLOW_API_KEY", "")).strip()
+        if not api_key:
+            return "", "ROBOFLOW_API_KEY is missing from {0}".format(
+                self.dotenv_path
+            )
+
+        return api_key, ""
 
     def handle_camera_frame(self, ros_image):
         try:
