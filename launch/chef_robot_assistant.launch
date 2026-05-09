@@ -1,5 +1,6 @@
 <launch>
   <!-- Speech recognition node -->
+  <env name="HF_TOKEN" value="$(env HF_TOKEN)" />
   <node
     pkg="chef_robot_assistant"
     type="speech_node.py"

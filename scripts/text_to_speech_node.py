@@ -35,7 +35,8 @@ class TextToSpeechNode:
         self.sub = rospy.Subscriber(
             TTS_TOPIC,
             String,
-            self.on_tts_request
+            callback=self.on_tts_request,
+            queue_size=10,
         )
 
         self.pub = rospy.Publisher(

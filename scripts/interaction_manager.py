@@ -95,7 +95,18 @@ class InteractionManager:
         self.tts_done = False
         self.sub_state = SubState.SPEAKING
         msg = String(data=text)
+
+        # Wait for at least one subscriber to connect so the message
+        # isn't silently dropped.
+        wait_start = rospy.Time.now()
+        while self.tts_pub.get_num_connections() == 0 and not rospy.is_shutdown():
+            if (rospy.Time.now() - wait_start).to_sec() > 5.0:
+                rospy.logwarn("No TTS subscriber connected after 5s, publishing anyway")
+                break
+            rospy.sleep(0.1)
+
         self.tts_pub.publish(msg)
+        rospy.loginfo("Speaking is done.")
 
     def wait_for_tts(self):
         while not rospy.is_shutdown() and not self.tts_done:
@@ -113,11 +124,11 @@ class InteractionManager:
         rate = rospy.Rate(10)
 
         while not rospy.is_shutdown():
+            rospy.loginfo(f"[run] state: {self.state}, sub-state: {self.sub_state}")
+
             if self.sub_state != SubState.PROCESSING:
                 rate.sleep()
                 continue
-
-            rospy.loginfo(f"State: {self.state.name}")
 
             if self.state == State.IDLE:
                 self.handle_idle()
