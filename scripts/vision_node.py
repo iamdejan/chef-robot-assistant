@@ -30,12 +30,12 @@ else:
     NUMPY_IMPORT_ERROR = ""
 
 try:
-    from ultralytics import YOLO
+    from inference import get_model
 except ImportError as exc:
-    YOLO = None
-    YOLO_IMPORT_ERROR = str(exc)
+    get_model = None
+    ROBOFLOW_IMPORT_ERROR = str(exc)
 else:
-    YOLO_IMPORT_ERROR = ""
+    ROBOFLOW_IMPORT_ERROR = ""
 
 
 NODE_NAME = "vision_node"
@@ -58,8 +58,9 @@ class VisionNode(object):
             self._param("detection_confidence_threshold", 0.5)
         )
         self.capture_duration_sec = float(self._param("capture_duration_sec", 3.0))
-        self.vision_model_path = os.path.expanduser(
-            self._param("vision_model_path", "")
+        self.vision_model_id = self._param(
+            "vision_model_id",
+            "ingredients-detection-yolov8-npkkb/5"
         )
         self.vision_sample_frame_count = int(
             self._param("vision_sample_frame_count", 10)
@@ -68,8 +69,8 @@ class VisionNode(object):
         self.vision_frame_stale_timeout_sec = float(
             self._param("vision_frame_stale_timeout_sec", 2.0)
         )
+        self.roboflow_api_key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
 
-        self.latest_frame = None
         self.latest_frame_stamp = None
         self.latest_frame_error = ""
         self.last_inference_error = ""
@@ -118,27 +119,26 @@ class VisionNode(object):
             dependency_error = self._dependency_error_message()
             if dependency_error:
                 self.model_error = dependency_error
-            elif not self.vision_model_path:
-                self.model_error = "vision_model_path is not set"
-            elif not os.path.isfile(self.vision_model_path):
-                self.model_error = (
-                    "vision model file does not exist: {0}".format(
-                        self.vision_model_path
-                    )
-                )
+            elif not self.vision_model_id:
+                self.model_error = "vision_model_id is not set"
+            elif not self.roboflow_api_key:
+                self.model_error = "ROBOFLOW_API_KEY is not set in the environment"
             else:
                 try:
-                    self.model = YOLO(self.vision_model_path)
+                    self.model = get_model(
+                        model_id=self.vision_model_id,
+                        api_key=self.roboflow_api_key
+                    )
                     self.model_error = ""
                     rospy.loginfo(
-                        "Loaded YOLO ingredient model from %s",
-                        self.vision_model_path
+                        "Loaded Roboflow model %s via local cache",
+                        self.vision_model_id
                     )
                 except Exception as exc:
                     self.model = None
                     self.model_error = (
-                        "failed to load YOLO model from {0}: {1}".format(
-                            self.vision_model_path,
+                        "failed to initialize Roboflow model {0}: {1}".format(
+                            self.vision_model_id,
                             exc
                         )
                     )
@@ -154,8 +154,10 @@ class VisionNode(object):
             errors.append("opencv-python import failed: {0}".format(CV2_IMPORT_ERROR))
         if NUMPY_IMPORT_ERROR:
             errors.append("numpy import failed: {0}".format(NUMPY_IMPORT_ERROR))
-        if YOLO_IMPORT_ERROR:
-            errors.append("ultralytics import failed: {0}".format(YOLO_IMPORT_ERROR))
+        if ROBOFLOW_IMPORT_ERROR:
+            errors.append(
+                "roboflow inference import failed: {0}".format(ROBOFLOW_IMPORT_ERROR)
+            )
         return "; ".join(errors)
 
     def handle_camera_frame(self, ros_image):
@@ -172,7 +174,6 @@ class VisionNode(object):
         stamp_sec = self._header_to_sec(ros_image.header)
 
         with self.frame_lock:
-            self.latest_frame = frame.copy()
             self.latest_frame_stamp = stamp_sec
             self.latest_frame_error = ""
 
@@ -206,44 +207,45 @@ class VisionNode(object):
 
     def _run_inference(self, model, frame):
         try:
-            result = model(frame, verbose=False)[0]
+            result = model.infer(frame)
         except Exception as exc:
             return [], None, "vision inference failed: {0}".format(exc)
 
+        if isinstance(result, list):
+            payload = result[0] if result else {}
+        else:
+            payload = result
+
+        predictions = payload.get("predictions", []) if isinstance(payload, dict) else []
         detections = []
-        boxes = getattr(result, "boxes", None)
-        names = getattr(result, "names", {})
 
-        if boxes is not None:
-            xyxy_values = boxes.xyxy.cpu().tolist()
-            confidence_values = boxes.conf.cpu().tolist()
-            class_values = boxes.cls.cpu().tolist()
+        for prediction in predictions:
+            confidence = float(prediction.get("confidence", 0.0))
+            if confidence < self.detection_confidence_threshold:
+                continue
 
-            for xyxy, confidence, class_id in zip(
-                xyxy_values,
-                confidence_values,
-                class_values
-            ):
-                if confidence < self.detection_confidence_threshold:
-                    continue
+            x_center = float(prediction.get("x", 0.0))
+            y_center = float(prediction.get("y", 0.0))
+            width = float(prediction.get("width", 0.0))
+            height = float(prediction.get("height", 0.0))
 
-                label = self._class_name_from_id(names, class_id)
-                detections.append({
-                    "label": label,
-                    "confidence": float(confidence),
-                    "xyxy": [int(value) for value in xyxy],
-                })
+            x1 = int(x_center - (width / 2.0))
+            y1 = int(y_center - (height / 2.0))
+            x2 = int(x_center + (width / 2.0))
+            y2 = int(y_center + (height / 2.0))
+
+            label = str(prediction.get("class", "")).strip()
+            if not label:
+                continue
+
+            detections.append({
+                "label": label,
+                "confidence": confidence,
+                "xyxy": [x1, y1, x2, y2],
+            })
 
         annotated_frame = self._annotate_frame(frame, detections)
         return detections, annotated_frame, ""
-
-    def _class_name_from_id(self, names, class_id):
-        class_index = int(class_id)
-        if isinstance(names, dict):
-            return str(names.get(class_index, class_index)).strip()
-        if isinstance(names, list) and class_index < len(names):
-            return str(names[class_index]).strip()
-        return str(class_index)
 
     def _annotate_frame(self, frame, detections):
         if cv2 is None or np is None:

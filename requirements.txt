@@ -1,6 +1,6 @@
 # Vision branch runtime dependencies.
 # Install ROS Noetic system packages on Ubuntu 20.04 first, then install these
 # Python packages inside the robot's Python 3.8 environment.
+inference
 numpy
 opencv-python
-ultralytics
