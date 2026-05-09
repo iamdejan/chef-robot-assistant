@@ -1,3 +1,6 @@
-# Foundation branch intentionally avoids extra pip dependencies.
-# Install ROS Noetic system packages on Ubuntu 20.04 and add model-specific
-# Python packages in later feature branches when the real integrations land.
+# Vision branch runtime dependencies.
+# Install ROS Noetic system packages on Ubuntu 20.04 first, then install these
+# Python packages inside the robot's Python 3.8 environment.
+numpy
+opencv-python
+ultralytics
