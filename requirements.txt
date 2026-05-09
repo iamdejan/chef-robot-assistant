@@ -1,0 +1,28 @@
+# ===============================
+# Chef Robot Assistant
+# Audio Listener Dependencies
+# ===============================
+
+# Audio recording
+PyAudio==0.2.14
+sounddevice>=0.4.6
+
+# Numerical processing
+numpy>=1.21
+
+# WAV file handling
+scipy>=1.7
+
+# Optional but recommended:
+# enables better HTTP performance + auth handling
+requests>=2.31
+
+# Optional (recommended for robotics deployments)
+python-dotenv>=1.0.0
+
+# HuggingFace
+transformers==4.46.3
+huggingface_hub==0.36.2
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
