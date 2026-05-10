@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import re
+
 import rospy
 
 from chef_robot_assistant.srv import DetectIngredients
@@ -42,6 +44,9 @@ class InteractionManager(object):
         self.default_cuisine = self._param("default_cuisine", "malay").lower()
         self.idle_restart_delay_sec = float(
             self._param("idle_restart_delay_sec", 3.0)
+        )
+        self.recipe_retry_buffer_sec = float(
+            self._param("recipe_retry_buffer_sec", 5.0)
         )
         self.image_generation_enabled = self._param(
             "image_generation_enabled",
@@ -149,11 +154,28 @@ class InteractionManager(object):
         self._say("Retry limit exceeded. I'm shutting down. Please try again.")
         self._reset_to_idle()
 
+    def _extract_retry_wait_seconds(self, message):
+        match = re.search(
+            r"please retry in\s+([0-9]+(?:\.[0-9]+)?)s",
+            str(message or ""),
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return 0.0
+
+        try:
+            wait_seconds = float(match.group(1))
+        except (TypeError, ValueError):
+            return 0.0
+
+        return max(0.0, min(wait_seconds, 300.0))
+
     def _retry_service_call(
         self,
         service_name,
         attempt_fn,
         retry_notice,
+        min_wait_seconds=0.0,
     ):
         max_attempts = max(1, int(self.speech_retry_limit))
         last_response = None
@@ -167,6 +189,17 @@ class InteractionManager(object):
             if attempt_index < max_attempts - 1:
                 rospy.logwarn("%s failed: %s", service_name, response.message)
                 self._say(retry_notice)
+                wait_seconds = max(
+                    float(min_wait_seconds),
+                    self._extract_retry_wait_seconds(response.message),
+                )
+                if wait_seconds > 0.0 and not rospy.is_shutdown():
+                    rospy.loginfo(
+                        "Waiting %.1f seconds before retrying %s",
+                        wait_seconds,
+                        service_name,
+                    )
+                    rospy.sleep(wait_seconds)
 
         if last_response is not None:
             rospy.logwarn("%s failed after %d attempts: %s", service_name, max_attempts, last_response.message)
@@ -247,7 +280,8 @@ class InteractionManager(object):
                 self.detected_ingredients,
                 self.selected_cuisine
             ),
-            "Recipe generation failed. I will try again."
+            "Recipe generation failed. I will try again.",
+            min_wait_seconds=self.recipe_retry_buffer_sec,
         )
         if not recipe_response.success:
             self._handle_retry_exhausted_shutdown()

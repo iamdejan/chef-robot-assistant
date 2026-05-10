@@ -24,6 +24,7 @@ chef_robot_assistant:
   recipe_api_timeout_sec: 20.0
   recipe_temperature: 0.4
   recipe_max_output_tokens: 512
+  recipe_retry_buffer_sec: 5.0
   default_cuisine: "malay"
   image_generation_enabled: true
   tts_voice: "en"
