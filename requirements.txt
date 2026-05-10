@@ -6,5 +6,6 @@ huggingface_hub>=0.36.2
 inference-sdk
 numpy
 opencv-python
+Pillow
 python-dotenv
 requests
