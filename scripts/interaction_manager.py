@@ -122,6 +122,14 @@ class InteractionManager(object):
         rospy.set_param(base_key + "/full_recipe_text", "")
         rospy.set_param(base_key + "/missing_ingredients", [])
 
+    def _is_retryable_detection_failure(self, message):
+        normalized = str(message or "").strip().lower()
+        retryable_markers = (
+            "no stable ingredient detections found",
+            "no detections were captured during",
+        )
+        return any(marker in normalized for marker in retryable_markers)
+
     def run_foundation_cycle(self):
         self._set_state("PROMPT_PLACE_INGREDIENTS")
         self._say("Please place at least 2 supported ingredients in front of me.")
@@ -131,6 +139,12 @@ class InteractionManager(object):
             detect_response = self.detect_ingredients()
             if not detect_response.success:
                 rospy.logwarn("Detection failed: %s", detect_response.message)
+                if self._is_retryable_detection_failure(detect_response.message):
+                    self._say(
+                        "No supported ingredients detected. Please place ingredients in front of me."
+                    )
+                    rospy.sleep(1.0)
+                    continue
                 self._reset_to_idle()
                 return
 
