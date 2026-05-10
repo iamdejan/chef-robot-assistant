@@ -3,7 +3,6 @@
 import os
 import threading
 from collections import Counter
-from collections import deque
 
 import rospy
 from cv_bridge import CvBridge
@@ -31,9 +30,9 @@ else:
     NUMPY_IMPORT_ERROR = ""
 
 try:
-    from inference import get_model
+    from inference_sdk import InferenceHTTPClient
 except ImportError as exc:
-    get_model = None
+    InferenceHTTPClient = None
     ROBOFLOW_IMPORT_ERROR = str(exc)
 else:
     ROBOFLOW_IMPORT_ERROR = ""
@@ -48,7 +47,7 @@ class VisionNode(object):
 
         self.bridge = CvBridge()
         self.frame_lock = threading.Lock()
-        self.model_lock = threading.Lock()
+        self.client_lock = threading.Lock()
 
         self.camera_topic = self._param("camera_topic", "/camera/image_raw")
         self.camera_frame_topic_out = self._param(
@@ -59,30 +58,36 @@ class VisionNode(object):
             self._param("detection_confidence_threshold", 0.5)
         )
         self.capture_duration_sec = float(self._param("capture_duration_sec", 3.0))
-        self.vision_model_id = self._param(
-            "vision_model_id",
-            "ingredients-detection-yolov8-npkkb/5"
+        self.vision_workspace_name = self._param(
+            "vision_workspace_name",
+            "lee-zhi-yang"
+        )
+        self.vision_workflow_id = self._param(
+            "vision_workflow_id",
+            "ingredient-detection-api"
         )
         self.vision_sample_frame_count = int(
             self._param("vision_sample_frame_count", 10)
         )
-        self.vision_min_frame_hits = int(self._param("vision_min_frame_hits", 2))
+        self.vision_min_frame_hits = max(
+            1,
+            int(self._param("vision_min_frame_hits", 2))
+        )
         self.vision_frame_stale_timeout_sec = float(
             self._param("vision_frame_stale_timeout_sec", 2.0)
         )
         self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.dotenv_path = os.path.join(self.repo_root, ".env")
         self.roboflow_api_key = ""
+        self.latest_frame = None
+        self.latest_frame_header = None
 
         self.latest_frame_stamp = None
         self.latest_frame_error = ""
         self.last_inference_error = ""
-        self.detection_history = deque(
-            maxlen=max(self.vision_sample_frame_count * 6, 60)
-        )
 
-        self.model = None
-        self.model_error = ""
+        self.client = None
+        self.client_error = ""
 
         self.debug_publisher = rospy.Publisher(
             self.camera_frame_topic_out,
@@ -102,7 +107,7 @@ class VisionNode(object):
             self.handle_detect
         )
 
-        self._ensure_model_loaded(log_error=True)
+        self._ensure_client_loaded(log_error=True)
 
         rospy.loginfo(
             "%s listening on %s and publishing debug frames to %s",
@@ -114,42 +119,46 @@ class VisionNode(object):
     def _param(self, key, default):
         return rospy.get_param("/chef_robot_assistant/{0}".format(key), default)
 
-    def _ensure_model_loaded(self, log_error):
-        with self.model_lock:
-            if self.model is not None:
-                return self.model
+    def _ensure_client_loaded(self, log_error):
+        with self.client_lock:
+            if self.client is not None:
+                return self.client
 
             dependency_error = self._dependency_error_message()
             if dependency_error:
-                self.model_error = dependency_error
-            elif not self.vision_model_id:
-                self.model_error = "vision_model_id is not set"
+                self.client_error = dependency_error
+            elif not self.vision_workspace_name:
+                self.client_error = "vision_workspace_name is not set"
+            elif not self.vision_workflow_id:
+                self.client_error = "vision_workflow_id is not set"
             else:
-                self.roboflow_api_key, self.model_error = self._read_roboflow_api_key()
+                self.roboflow_api_key, self.client_error = self._read_roboflow_api_key()
                 if self.roboflow_api_key:
                     try:
-                        self.model = get_model(
-                            model_id=self.vision_model_id,
+                        self.client = InferenceHTTPClient(
+                            api_url="https://serverless.roboflow.com",
                             api_key=self.roboflow_api_key
                         )
-                        self.model_error = ""
+                        self.client_error = ""
                         rospy.loginfo(
-                            "Loaded Roboflow model %s via local cache",
-                            self.vision_model_id
+                            "Configured Roboflow workflow client for %s/%s",
+                            self.vision_workspace_name,
+                            self.vision_workflow_id
                         )
                     except Exception as exc:
-                        self.model = None
-                        self.model_error = (
-                            "failed to initialize Roboflow model {0}: {1}".format(
-                                self.vision_model_id,
+                        self.client = None
+                        self.client_error = (
+                            "failed to initialize Roboflow workflow client for {0}/{1}: {2}".format(
+                                self.vision_workspace_name,
+                                self.vision_workflow_id,
                                 exc
                             )
                         )
 
-            if self.model is None and log_error and self.model_error:
-                rospy.logerr(self.model_error)
+            if self.client is None and log_error and self.client_error:
+                rospy.logerr(self.client_error)
 
-            return self.model
+            return self.client
 
     def _dependency_error_message(self):
         errors = []
@@ -159,7 +168,7 @@ class VisionNode(object):
             errors.append("numpy import failed: {0}".format(NUMPY_IMPORT_ERROR))
         if ROBOFLOW_IMPORT_ERROR:
             errors.append(
-                "roboflow inference import failed: {0}".format(ROBOFLOW_IMPORT_ERROR)
+                "roboflow inference-sdk import failed: {0}".format(ROBOFLOW_IMPORT_ERROR)
             )
         return "; ".join(errors)
 
@@ -197,49 +206,36 @@ class VisionNode(object):
         stamp_sec = self._header_to_sec(ros_image.header)
 
         with self.frame_lock:
+            self.latest_frame = frame.copy()
+            self.latest_frame_header = ros_image.header
             self.latest_frame_stamp = stamp_sec
             self.latest_frame_error = ""
-
-        model = self._ensure_model_loaded(log_error=False)
-        if model is None:
-            return
-
-        detections, annotated_frame, error_message = self._run_inference(model, frame)
-        if error_message:
-            with self.frame_lock:
-                self.last_inference_error = error_message
-            rospy.logwarn_throttle(5.0, error_message)
-            return
-
-        with self.frame_lock:
-            self.last_inference_error = ""
-
-        self._publish_debug_frame(annotated_frame, ros_image.header)
-
-        frame_labels = sorted({item["label"] for item in detections})
-        with self.frame_lock:
-            self.detection_history.append({
-                "stamp": stamp_sec,
-                "labels": frame_labels,
-            })
 
     def _header_to_sec(self, header):
         if header.stamp and header.stamp.to_sec() > 0.0:
             return header.stamp.to_sec()
         return rospy.Time.now().to_sec()
 
-    def _run_inference(self, model, frame):
+    def _run_inference(self, frame):
+        client = self._ensure_client_loaded(log_error=False)
+        if client is None:
+            return [], None, self.client_error
+
         try:
-            result = model.infer(frame)
+            result = client.run_workflow(
+                workspace_name=self.vision_workspace_name,
+                workflow_id=self.vision_workflow_id,
+                images={"image": frame},
+                use_cache=True
+            )
         except Exception as exc:
-            return [], None, "vision inference failed: {0}".format(exc)
+            return [], None, "workflow inference failed for {0}/{1}: {2}".format(
+                self.vision_workspace_name,
+                self.vision_workflow_id,
+                exc
+            )
 
-        if isinstance(result, list):
-            payload = result[0] if result else {}
-        else:
-            payload = result
-
-        predictions = payload.get("predictions", []) if isinstance(payload, dict) else []
+        predictions = self._extract_workflow_predictions(result)
         detections = []
 
         for prediction in predictions:
@@ -257,7 +253,7 @@ class VisionNode(object):
             x2 = int(x_center + (width / 2.0))
             y2 = int(y_center + (height / 2.0))
 
-            label = str(prediction.get("class", "")).strip()
+            label = str(prediction.get("class", "")).strip().lower()
             if not label:
                 continue
 
@@ -269,6 +265,46 @@ class VisionNode(object):
 
         annotated_frame = self._annotate_frame(frame, detections)
         return detections, annotated_frame, ""
+
+    def _extract_workflow_predictions(self, payload):
+        direct_predictions = self._coerce_predictions(payload)
+        if direct_predictions:
+            return direct_predictions
+
+        queue = [payload]
+        while queue:
+            current = queue.pop(0)
+
+            if isinstance(current, dict):
+                nested_predictions = self._coerce_predictions(current)
+                if nested_predictions:
+                    return nested_predictions
+                queue.extend(current.values())
+            elif isinstance(current, list):
+                queue.extend(current)
+
+        return []
+
+    def _coerce_predictions(self, payload):
+        if not isinstance(payload, dict):
+            return []
+
+        predictions = payload.get("predictions", [])
+        if not isinstance(predictions, list):
+            return []
+
+        normalized = []
+        for prediction in predictions:
+            if not isinstance(prediction, dict):
+                continue
+            if self._looks_like_detection_prediction(prediction):
+                normalized.append(prediction)
+
+        return normalized
+
+    def _looks_like_detection_prediction(self, prediction):
+        required_keys = ("class", "confidence", "x", "y", "width", "height")
+        return all(key in prediction for key in required_keys)
 
     def _annotate_frame(self, frame, detections):
         if cv2 is None or np is None:
@@ -310,33 +346,72 @@ class VisionNode(object):
         self.debug_publisher.publish(debug_image)
 
     def handle_detect(self, _request):
-        model = self._ensure_model_loaded(log_error=True)
-        if model is None:
+        client = self._ensure_client_loaded(log_error=True)
+        if client is None:
             return DetectIngredientsResponse(
                 success=False,
                 ingredients=[],
-                message=self.model_error
+                message=self.client_error
             )
 
-        fresh_frame, frame_error = self._has_fresh_frame()
-        if not fresh_frame:
-            return DetectIngredientsResponse(
-                success=False,
-                ingredients=[],
-                message=frame_error
+        sample_count = max(self.vision_sample_frame_count, 1)
+        frame_wait_timeout_sec = max(
+            self.capture_duration_sec / float(sample_count),
+            0.5
+        )
+        sampled_snapshots = []
+        previous_stamp = None
+
+        for sample_index in range(sample_count):
+            if rospy.is_shutdown():
+                break
+
+            frame_ok, frame_or_error = self._wait_for_next_frame(
+                previous_stamp,
+                frame_wait_timeout_sec
             )
+            if not frame_ok:
+                if not sampled_snapshots:
+                    return DetectIngredientsResponse(
+                        success=False,
+                        ingredients=[],
+                        message=frame_or_error
+                    )
+                rospy.logwarn(
+                    "Stopping ingredient sampling early after %d/%d frames: %s",
+                    len(sampled_snapshots),
+                    sample_count,
+                    frame_or_error
+                )
+                break
 
-        capture_start = rospy.Time.now().to_sec()
-        capture_end = capture_start + self.capture_duration_sec
-        sleep_interval = self.capture_duration_sec / max(self.vision_sample_frame_count, 1)
+            frame, header, frame_stamp = frame_or_error
+            previous_stamp = frame_stamp
+            detections, annotated_frame, error_message = self._run_inference(frame)
+            if error_message:
+                with self.frame_lock:
+                    self.last_inference_error = error_message
+                rospy.logwarn_throttle(5.0, error_message)
+            else:
+                with self.frame_lock:
+                    self.last_inference_error = ""
+                self._publish_debug_frame(annotated_frame, header)
+                labels = sorted({item["label"] for item in detections})
+                rospy.loginfo(
+                    "Vision sample %d/%d captured %d detections above %.2f: %s",
+                    sample_index + 1,
+                    sample_count,
+                    len(detections),
+                    self.detection_confidence_threshold,
+                    ", ".join(labels) if labels else "none"
+                )
+                sampled_snapshots.append({
+                    "labels": labels
+                })
 
-        while not rospy.is_shutdown() and rospy.Time.now().to_sec() < capture_end:
-            rospy.sleep(max(sleep_interval, 0.05))
-
-        snapshots = self._window_snapshots(capture_start, capture_end)
-        if not snapshots:
+        if not sampled_snapshots:
             with self.frame_lock:
-                inference_error = self.last_inference_error
+                inference_error = self.last_inference_error or self.client_error
 
             return DetectIngredientsResponse(
                 success=False,
@@ -348,14 +423,14 @@ class VisionNode(object):
                 )
             )
 
-        sampled_snapshots = snapshots[-self.vision_sample_frame_count:]
+        required_hits = min(self.vision_min_frame_hits, sample_count)
         label_counts = Counter()
         for snapshot in sampled_snapshots:
             label_counts.update(snapshot["labels"])
 
         stable_items = [
             item for item in label_counts.items()
-            if item[1] >= self.vision_min_frame_hits
+            if item[1] >= required_hits
         ]
         stable_items.sort(key=lambda item: (-item[1], item[0]))
         ingredients = [item[0] for item in stable_items]
@@ -365,8 +440,11 @@ class VisionNode(object):
                 success=False,
                 ingredients=[],
                 message=(
-                    "no stable ingredient detections found across {0} sampled frames".format(
-                        len(sampled_snapshots)
+                    "no stable ingredient detections found across {0} sampled frames "
+                    "(required hits: {1}, label hits: {2})".format(
+                        len(sampled_snapshots),
+                        required_hits,
+                        self._format_label_counts(label_counts)
                     )
                 )
             )
@@ -382,8 +460,42 @@ class VisionNode(object):
             )
         )
 
-    def _has_fresh_frame(self):
+    def _wait_for_next_frame(self, previous_stamp, timeout_sec):
+        deadline = rospy.Time.now().to_sec() + max(timeout_sec, 0.0)
+        last_error = "no camera frames received on {0}".format(self.camera_topic)
+
+        while not rospy.is_shutdown():
+            frame_ok, frame_or_error = self._get_fresh_frame()
+            if frame_ok:
+                frame, header, stamp = frame_or_error
+                if previous_stamp is None or stamp > previous_stamp:
+                    return True, (frame, header, stamp)
+                last_error = (
+                    "camera frames on {0} are not updating".format(self.camera_topic)
+                )
+            else:
+                last_error = frame_or_error
+
+            if rospy.Time.now().to_sec() >= deadline:
+                break
+
+            rospy.sleep(0.02)
+
+        return False, last_error
+
+    def _format_label_counts(self, label_counts):
+        if not label_counts:
+            return "none"
+
+        ordered_items = sorted(label_counts.items(), key=lambda item: (-item[1], item[0]))
+        return ", ".join(
+            "{0}:{1}".format(label, count) for label, count in ordered_items
+        )
+
+    def _get_fresh_frame(self):
         with self.frame_lock:
+            latest_frame = None if self.latest_frame is None else self.latest_frame.copy()
+            latest_frame_header = self.latest_frame_header
             latest_frame_stamp = self.latest_frame_stamp
             latest_frame_error = self.latest_frame_error
 
@@ -399,16 +511,10 @@ class VisionNode(object):
                 "latest camera frame is stale ({0:.2f}s old)".format(frame_age)
             )
 
-        return True, ""
+        if latest_frame is None or latest_frame_header is None:
+            return False, "camera frame buffer is empty on {0}".format(self.camera_topic)
 
-    def _window_snapshots(self, capture_start, capture_end):
-        with self.frame_lock:
-            snapshots = list(self.detection_history)
-
-        return [
-            snapshot for snapshot in snapshots
-            if capture_start <= snapshot["stamp"] <= capture_end
-        ]
+        return True, (latest_frame, latest_frame_header, latest_frame_stamp)
 
 
 def main():
