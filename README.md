@@ -18,6 +18,9 @@ Before setting up this repository, ensure the following requirements are met:
 
 1. Make sure the ROS workspace is installed in an environment matching the versions listed above.
 
+   For the speech branch, install `alsa-utils` so the `arecord` microphone capture
+   command is available on Ubuntu.
+
 2. Create a ROS workspace if you haven't already. The folder name is up to you, but the recommended name is `catkin_ws`, following the standard convention:
 
    ```bash
