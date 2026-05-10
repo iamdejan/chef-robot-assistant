@@ -24,6 +24,7 @@ class InteractionManager(object):
         self.state = "IDLE"
         self.retry_count = 0
         self.cycle_in_progress = False
+        self.prompt_restart_after_idle = False
         self.detected_ingredients = []
         self.selected_cuisine = ""
         self.recipe_result = {}
@@ -103,19 +104,56 @@ class InteractionManager(object):
             self._reset_to_idle()
         finally:
             self.cycle_in_progress = False
-            if self.state == "IDLE" and not rospy.is_shutdown():
-                self._schedule_next_cycle(self.idle_restart_delay_sec)
+            if (
+                self.state == "IDLE"
+                and self.prompt_restart_after_idle
+                and not rospy.is_shutdown()
+            ):
+                self._schedule_restart_confirmation(self.idle_restart_delay_sec)
 
     def _schedule_next_cycle(self, delay_sec):
+        normalized_delay = max(0.01, float(delay_sec))
         rospy.loginfo(
             "Scheduling next interaction cycle in %.1f seconds",
             max(0.0, delay_sec),
         )
         rospy.Timer(
-            rospy.Duration(max(0.0, delay_sec)),
+            rospy.Duration(normalized_delay),
             self._run_once,
             oneshot=True,
         )
+
+    def _schedule_restart_confirmation(self, delay_sec):
+        normalized_delay = max(0.01, float(delay_sec))
+        rospy.loginfo(
+            "Scheduling next-cycle confirmation in %.1f seconds",
+            max(0.0, delay_sec),
+        )
+        rospy.Timer(
+            rospy.Duration(normalized_delay),
+            self._ask_to_start_next_cycle,
+            oneshot=True,
+        )
+
+    def _ask_to_start_next_cycle(self, _event):
+        if rospy.is_shutdown() or self.cycle_in_progress or self.state != "IDLE":
+            return
+
+        self._set_state("ASK_NEXT_CYCLE")
+        self._say("Do you want me to start again?")
+
+        self._set_state("LISTEN_NEXT_CYCLE")
+        response = self.transcribe_speech()
+        transcript = response.transcript.strip().lower() if response.success else ""
+        should_restart = self._parse_yes_no(transcript)
+
+        if should_restart:
+            self._reset_to_idle(prompt_for_next_cycle=False)
+            self._schedule_next_cycle(0.0)
+            return
+
+        self._say("I'm shutting down. Goodbye.")
+        self._reset_to_idle(prompt_for_next_cycle=False)
 
     def _set_state(self, new_state):
         self.state = new_state
@@ -151,7 +189,7 @@ class InteractionManager(object):
         rospy.set_param(base_key + "/missing_ingredients", [])
 
     def _handle_retry_exhausted_shutdown(self):
-        self._say("Retry limit exceeded. I'm shutting down. Please try again.")
+        self._say("Retry limit exceeded.")
         self._reset_to_idle()
 
     def _extract_retry_wait_seconds(self, message):
@@ -389,9 +427,10 @@ class InteractionManager(object):
             cleaned_items[-1],
         )
 
-    def _reset_to_idle(self):
+    def _reset_to_idle(self, prompt_for_next_cycle=True):
         self.state = "IDLE"
         self.retry_count = 0
+        self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
         self.selected_cuisine = ""
         self.recipe_result = {}
