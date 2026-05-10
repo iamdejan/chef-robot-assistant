@@ -18,5 +18,9 @@ chef_robot_assistant:
   speech_compute_type: "int8"
   speech_language: ""
   speech_beam_size: 1
+  recipe_model_name: "gemini-2.5-flash-lite"
+  recipe_api_timeout_sec: 20.0
+  recipe_temperature: 0.4
+  recipe_max_output_tokens: 512
   default_cuisine: "malay"
   image_generation_enabled: true
