@@ -122,6 +122,33 @@ class InteractionManager(object):
         rospy.set_param(base_key + "/full_recipe_text", "")
         rospy.set_param(base_key + "/missing_ingredients", [])
 
+    def _handle_retry_exhausted_shutdown(self):
+        self._say("Retry limit exceeded. I'm shutting down. Please try again.")
+        self._reset_to_idle()
+
+    def _retry_service_call(
+        self,
+        service_name,
+        attempt_fn,
+        retry_notice,
+    ):
+        max_attempts = max(1, int(self.speech_retry_limit))
+        last_response = None
+
+        for attempt_index in range(max_attempts):
+            response = attempt_fn()
+            last_response = response
+            if response.success:
+                return response
+
+            if attempt_index < max_attempts - 1:
+                rospy.logwarn("%s failed: %s", service_name, response.message)
+                self._say(retry_notice)
+
+        if last_response is not None:
+            rospy.logwarn("%s failed after %d attempts: %s", service_name, max_attempts, last_response.message)
+        return last_response
+
     def _is_retryable_detection_failure(self, message):
         normalized = str(message or "").strip().lower()
         retryable_markers = (
@@ -170,8 +197,7 @@ class InteractionManager(object):
         self._set_state("LISTEN_CUISINE")
         transcript = self._capture_transcript()
         if transcript is None:
-            self._say("Too long without user response. Please try again.")
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self._set_state("VALIDATE_CUISINE")
@@ -186,13 +212,16 @@ class InteractionManager(object):
             self._say("Got it, please wait for a moment.")
 
         self._set_state("GENERATE_RECIPE")
-        recipe_response = self.generate_recipe(
-            self.detected_ingredients,
-            self.selected_cuisine
+        recipe_response = self._retry_service_call(
+            "Recipe generation",
+            lambda: self.generate_recipe(
+                self.detected_ingredients,
+                self.selected_cuisine
+            ),
+            "Recipe generation failed. I will try again."
         )
         if not recipe_response.success:
-            self._say("Sorry, some error occurred when generating a recipe.")
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self.recipe_result = {
@@ -232,15 +261,16 @@ class InteractionManager(object):
             return
 
         self._set_state("GENERATE_IMAGE")
-        image_response = self.generate_dish_image(
-            self.recipe_result["dish_name"],
-            self.recipe_result["spoken_summary"]
+        image_response = self._retry_service_call(
+            "Image generation",
+            lambda: self.generate_dish_image(
+                self.recipe_result["dish_name"],
+                self.recipe_result["spoken_summary"]
+            ),
+            "Image generation failed. I will try again."
         )
         if not image_response.success:
-            self._say(
-                "Sorry, image generation failed. Here is your recipe only. Thank you."
-            )
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self._set_state("PRESENT_IMAGE")
@@ -257,7 +287,8 @@ class InteractionManager(object):
                 return transcript
 
             self.retry_count += 1
-            self._say("Sorry, I cannot hear you. Please say it again.")
+            if self.retry_count < self.speech_retry_limit:
+                self._say("Sorry, I cannot hear you. Please say it again.")
 
         return None
 
