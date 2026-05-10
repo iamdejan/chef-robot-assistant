@@ -211,6 +211,12 @@ class InteractionManager(object):
             )
             rospy.sleep(1.0)
 
+        self._say(
+            "I detected {0}.".format(
+                self._format_spoken_list(self.detected_ingredients)
+            )
+        )
+
         self._set_state("ASK_CUISINE")
         self._say(
             "I am generating a recipe for you. "
@@ -335,6 +341,19 @@ class InteractionManager(object):
             return False
 
         return False
+
+    def _format_spoken_list(self, items):
+        cleaned_items = [str(item).strip() for item in items if str(item).strip()]
+        if not cleaned_items:
+            return ""
+        if len(cleaned_items) == 1:
+            return cleaned_items[0]
+        if len(cleaned_items) == 2:
+            return "{0} and {1}".format(cleaned_items[0], cleaned_items[1])
+        return "{0}, and {1}".format(
+            ", ".join(cleaned_items[:-1]),
+            cleaned_items[-1],
+        )
 
     def _reset_to_idle(self):
         self.state = "IDLE"

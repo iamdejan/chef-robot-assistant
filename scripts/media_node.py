@@ -219,9 +219,22 @@ class MediaNode(object):
         margin = 40
         max_width_chars = max(50, int((self.display_window_width - margin * 2) / 16))
 
-        title = "Chef Robot Assistant"
+        app_title = "Chef Robot Assistant"
+        dish_title = "No dish generated yet"
         if recipe_data and recipe_data.get("dish_name"):
-            title = recipe_data["dish_name"]
+            dish_title = recipe_data["dish_name"]
+
+        cv2.putText(
+            canvas,
+            app_title,
+            (margin, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            accent,
+            2,
+            cv2.LINE_AA,
+        )
+        y += 45
 
         if spoken_text:
             cv2.putText(
@@ -280,7 +293,7 @@ class MediaNode(object):
 
         cv2.putText(
             canvas,
-            title,
+            dish_title,
             (margin, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
