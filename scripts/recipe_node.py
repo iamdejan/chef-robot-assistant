@@ -106,17 +106,25 @@ class RecipeNode(object):
         missing_ingredients,
     ):
         normalized_recipe = self._normalize_match_text(full_recipe_text)
-        normalized_missing = {
-            self._normalize_ingredient(item) for item in missing_ingredients
-        }
+        normalized_missing = [
+            self._normalize_match_text(item) for item in missing_ingredients
+        ]
         missing = []
         for item in ingredients:
-            if item in normalized_missing:
+            if self._text_contains_ingredient(" ".join(normalized_missing), item):
                 missing.append(item)
                 continue
-            if item and item not in normalized_recipe:
+            if item and not self._text_contains_ingredient(normalized_recipe, item):
                 missing.append(item)
         return missing
+
+    def _text_contains_ingredient(self, text, ingredient):
+        normalized_text = self._normalize_match_text(text)
+        normalized_ingredient = self._normalize_match_text(ingredient)
+        if not normalized_text or not normalized_ingredient:
+            return False
+        pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
+        return re.search(pattern, normalized_text) is not None
 
     def _build_prompt(self, ingredients, cuisine, strict=False, missing_required=None):
         ingredient_text = ", ".join(ingredients)
@@ -136,14 +144,14 @@ class RecipeNode(object):
             "You are a practical cooking assistant for a home robot.\n"
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
-            "{0}"
+            "{strict_lines}"
             "Basic pantry items are allowed when needed.\n"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
             "If no extra ingredients are needed, write 'none'.\n"
             "Keep the spoken summary short enough to be read aloud naturally.\n"
             "Keep the recipe practical and concise.\n\n"
-            "Detected ingredients: {0}\n"
-            "Requested cuisine: {1}\n\n"
+            "Detected ingredients: {ingredient_text}\n"
+            "Requested cuisine: {cuisine_text}\n\n"
             "Return exactly these labeled sections:\n"
             "Dish Name: <short dish name>\n"
             "Spoken Summary: <1-2 sentence summary>\n"
@@ -151,7 +159,11 @@ class RecipeNode(object):
             "- <one item per line or 'none'>\n"
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
-        ).format(strict_lines, ingredient_text, cuisine_text)
+        ).format(
+            strict_lines=strict_lines,
+            ingredient_text=ingredient_text,
+            cuisine_text=cuisine_text,
+        )
 
     def _call_gemini_api(self, api_key, prompt):
         dependency_error = self._dependency_error_message()
