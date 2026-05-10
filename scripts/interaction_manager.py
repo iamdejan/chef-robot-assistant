@@ -67,6 +67,7 @@ class InteractionManager(object):
             GenerateDishImage
         )
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
+        self._clear_recipe_display_state()
 
         rospy.loginfo("%s ready for foundation flow", NODE_NAME)
         rospy.Timer(rospy.Duration(1.0), self._run_once, oneshot=True)
@@ -96,30 +97,55 @@ class InteractionManager(object):
         rospy.loginfo("Robot says: %s", text)
         response = self.speak_text(text)
         if not response.success:
-            rospy.logwarn("SpeakText stub returned failure: %s", response.message)
+            rospy.logwarn("SpeakText returned failure: %s", response.message)
+
+    def _publish_recipe_display_state(self):
+        base_key = "/chef_robot_assistant/last_recipe"
+        rospy.set_param(base_key + "/dish_name", self.recipe_result.get("dish_name", ""))
+        rospy.set_param(
+            base_key + "/spoken_summary",
+            self.recipe_result.get("spoken_summary", ""),
+        )
+        rospy.set_param(
+            base_key + "/full_recipe_text",
+            self.recipe_result.get("full_recipe_text", ""),
+        )
+        rospy.set_param(
+            base_key + "/missing_ingredients",
+            list(self.recipe_result.get("missing_ingredients", [])),
+        )
+
+    def _clear_recipe_display_state(self):
+        base_key = "/chef_robot_assistant/last_recipe"
+        rospy.set_param(base_key + "/dish_name", "")
+        rospy.set_param(base_key + "/spoken_summary", "")
+        rospy.set_param(base_key + "/full_recipe_text", "")
+        rospy.set_param(base_key + "/missing_ingredients", [])
 
     def run_foundation_cycle(self):
         self._set_state("PROMPT_PLACE_INGREDIENTS")
         self._say("Please place at least 2 supported ingredients in front of me.")
 
-        self._set_state("DETECT_INGREDIENTS")
-        detect_response = self.detect_ingredients()
-        if not detect_response.success:
-            rospy.logwarn("Detection failed: %s", detect_response.message)
-            self._reset_to_idle()
-            return
+        while not rospy.is_shutdown():
+            self._set_state("DETECT_INGREDIENTS")
+            detect_response = self.detect_ingredients()
+            if not detect_response.success:
+                rospy.logwarn("Detection failed: %s", detect_response.message)
+                self._reset_to_idle()
+                return
 
-        self.detected_ingredients = list(detect_response.ingredients)
+            self.detected_ingredients = list(detect_response.ingredients)
 
-        self._set_state("CHECK_INGREDIENT_COUNT")
-        if len(self.detected_ingredients) < self.min_ingredient_count:
+            self._set_state("CHECK_INGREDIENT_COUNT")
+            if len(self.detected_ingredients) >= self.min_ingredient_count:
+                break
+
             self._say(
                 "Only {0} ingredient detected. Please add more ingredients.".format(
                     len(self.detected_ingredients)
                 )
             )
-            self._reset_to_idle()
-            return
+            rospy.sleep(1.0)
 
         self._set_state("ASK_CUISINE")
         self._say(
@@ -165,6 +191,7 @@ class InteractionManager(object):
         self._set_state("PRESENT_RECIPE")
         summary = self.recipe_result["spoken_summary"]
         missing = self.recipe_result["missing_ingredients"]
+        self._publish_recipe_display_state()
         if missing:
             summary = "{0} You still need to buy: {1}.".format(
                 summary,
@@ -248,6 +275,7 @@ class InteractionManager(object):
         self.selected_cuisine = ""
         self.recipe_result = {}
         self.image_requested = False
+        self._clear_recipe_display_state()
         rospy.loginfo("State -> IDLE")
 
 

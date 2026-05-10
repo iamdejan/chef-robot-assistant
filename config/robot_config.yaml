@@ -25,3 +25,15 @@ chef_robot_assistant:
   recipe_max_output_tokens: 512
   default_cuisine: "malay"
   image_generation_enabled: true
+  tts_voice: "en"
+  tts_speed_wpm: 165
+  display_window_enabled: true
+  display_recipe_window_name: "Chef Robot Recipe"
+  display_image_window_name: "Chef Robot Dish Image"
+  display_window_width: 1280
+  display_window_height: 720
+  image_model_name: "Tongyi-MAI/Z-Image-Turbo"
+  image_api_timeout_sec: 60.0
+  image_output_dir: "/tmp/chef_robot_assistant_generated_media"
+  image_width: 1024
+  image_height: 1024
