@@ -21,6 +21,7 @@ class InteractionManager(object):
 
         self.state = "IDLE"
         self.retry_count = 0
+        self.cycle_in_progress = False
         self.detected_ingredients = []
         self.selected_cuisine = ""
         self.recipe_result = {}
@@ -39,6 +40,9 @@ class InteractionManager(object):
         self.min_ingredient_count = self._param("min_ingredient_count", 2)
         self.speech_retry_limit = self._param("speech_retry_limit", 3)
         self.default_cuisine = self._param("default_cuisine", "malay").lower()
+        self.idle_restart_delay_sec = float(
+            self._param("idle_restart_delay_sec", 3.0)
+        )
         self.image_generation_enabled = self._param(
             "image_generation_enabled",
             True
@@ -69,8 +73,8 @@ class InteractionManager(object):
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
         self._clear_recipe_display_state()
 
-        rospy.loginfo("%s ready for foundation flow", NODE_NAME)
-        rospy.Timer(rospy.Duration(1.0), self._run_once, oneshot=True)
+        rospy.loginfo("%s ready for continuous interaction flow", NODE_NAME)
+        self._schedule_next_cycle(1.0)
 
     def _param(self, key, default):
         return rospy.get_param("/chef_robot_assistant/{0}".format(key), default)
@@ -80,6 +84,10 @@ class InteractionManager(object):
         rospy.wait_for_service(service_name, timeout=10.0)
 
     def _run_once(self, _event):
+        if self.cycle_in_progress or rospy.is_shutdown():
+            return
+
+        self.cycle_in_progress = True
         try:
             self.run_foundation_cycle()
         except rospy.ServiceException as exc:
@@ -88,6 +96,21 @@ class InteractionManager(object):
         except rospy.ROSException as exc:
             rospy.logerr("ROS runtime error: %s", exc)
             self._reset_to_idle()
+        finally:
+            self.cycle_in_progress = False
+            if self.state == "IDLE" and not rospy.is_shutdown():
+                self._schedule_next_cycle(self.idle_restart_delay_sec)
+
+    def _schedule_next_cycle(self, delay_sec):
+        rospy.loginfo(
+            "Scheduling next interaction cycle in %.1f seconds",
+            max(0.0, delay_sec),
+        )
+        rospy.Timer(
+            rospy.Duration(max(0.0, delay_sec)),
+            self._run_once,
+            oneshot=True,
+        )
 
     def _set_state(self, new_state):
         self.state = new_state
