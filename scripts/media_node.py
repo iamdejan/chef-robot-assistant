@@ -79,6 +79,7 @@ class MediaNode(object):
         self.current_recipe_data = None
         self.current_spoken_text = ""
         self.current_image = None
+        self.current_recipe_is_stale = False
         self.recipe_window_dirty = False
         self.image_window_dirty = False
 
@@ -209,8 +210,10 @@ class MediaNode(object):
         recipe_data = self._load_recipe_display_data()
         if recipe_data is not None:
             self.current_recipe_data = recipe_data
+            self.current_recipe_is_stale = False
         else:
             recipe_data = self.current_recipe_data
+            self.current_recipe_is_stale = recipe_data is not None
 
         y = 50
         margin = 40
@@ -220,19 +223,18 @@ class MediaNode(object):
         if recipe_data and recipe_data.get("dish_name"):
             title = recipe_data["dish_name"]
 
-        cv2.putText(
-            canvas,
-            title,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 45
-
         if spoken_text:
+            cv2.putText(
+                canvas,
+                "Robot Says",
+                (margin, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                accent,
+                2,
+                cv2.LINE_AA,
+            )
+            y += 34
             for line in self._wrap_text(spoken_text, max_width_chars):
                 cv2.putText(
                     canvas,
@@ -245,7 +247,48 @@ class MediaNode(object):
                     cv2.LINE_AA,
                 )
                 y += 28
-            y += 14
+            y += 20
+
+        if self.current_recipe_is_stale and recipe_data:
+            cv2.putText(
+                canvas,
+                "Previous Dish and Recipe",
+                (margin, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.75,
+                (0, 0, 180),
+                2,
+                cv2.LINE_AA,
+            )
+            y += 36
+
+        title_label = "Dish Name"
+        if self.current_recipe_is_stale and recipe_data:
+            title_label = "Previous Dish Name"
+
+        cv2.putText(
+            canvas,
+            title_label,
+            (margin, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            accent,
+            2,
+            cv2.LINE_AA,
+        )
+        y += 34
+
+        cv2.putText(
+            canvas,
+            title,
+            (margin, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            accent,
+            2,
+            cv2.LINE_AA,
+        )
+        y += 45
 
         if recipe_data and recipe_data.get("missing_ingredients"):
             missing_text = "Need to buy: {0}".format(
@@ -266,9 +309,12 @@ class MediaNode(object):
             y += 10
 
         if recipe_data and recipe_data.get("full_recipe_text"):
+            recipe_label = "Recipe"
+            if self.current_recipe_is_stale:
+                recipe_label = "Previous Recipe"
             cv2.putText(
                 canvas,
-                "Recipe",
+                recipe_label,
                 (margin, y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
