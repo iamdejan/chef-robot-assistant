@@ -1,5 +1,5 @@
-.DS_Store
+.venv/
 __pycache__/
-*.pyc
-AGENTS.md
 .env
+.DS_Store
+AGENTS.md
