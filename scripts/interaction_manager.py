@@ -305,8 +305,8 @@ class InteractionManager(object):
         if self.selected_cuisine not in VALID_CUISINES:
             self.selected_cuisine = self.default_cuisine
             self._say(
-                "Sorry, I cannot fulfill that requirement. "
-                "I will generate a recipe based on the default setting."
+                "Sorry, I cannot fulfill that request. "
+                "I will generate a recipe based on Malay cuisine."
             )
         else:
             self._say("Got it, please wait for a moment.")
