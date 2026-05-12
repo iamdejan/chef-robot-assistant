@@ -5,7 +5,7 @@ faster-whisper
 huggingface_hub>=0.36.2
 inference-sdk
 numpy
-opencv-python
+opencv-python<=4.10.0.84,>=4.8.1.78
 Pillow
 python-dotenv
 requests
