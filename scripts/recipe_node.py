@@ -2,6 +2,7 @@
 
 import os
 import re
+import time
 
 import rospy
 
@@ -42,6 +43,9 @@ class RecipeNode(object):
         self.recipe_temperature = float(self._param("recipe_temperature", 0.4))
         self.recipe_max_output_tokens = int(
             self._param("recipe_max_output_tokens", 512)
+        )
+        self.recipe_retry_buffer_sec = float(
+            self._param("recipe_retry_buffer_sec", 5.0)
         )
         self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.dotenv_path = os.path.join(self.repo_root, ".env")
@@ -369,6 +373,12 @@ class RecipeNode(object):
 
         missing_required = []
         for attempt in range(2):
+            if attempt > 0 and self.recipe_retry_buffer_sec > 0.0:
+                rospy.loginfo(
+                    "Waiting %.1f seconds before stricter Gemini recipe retry",
+                    self.recipe_retry_buffer_sec,
+                )
+                time.sleep(self.recipe_retry_buffer_sec)
             prompt = self._build_prompt(
                 ingredients,
                 cuisine,

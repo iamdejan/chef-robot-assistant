@@ -1,0 +1,19 @@
+[project]
+name = "chef-robot-assistant"
+version = "0.0.0"
+description = "Python runtime dependencies for the Chef Robot Assistant ROS package."
+requires-python = ">=3.8,<3.9"
+dependencies = [
+    "faster-whisper",
+    "huggingface_hub>=0.36.2",
+    "inference-sdk",
+    "numpy",
+    "opencv-python",
+    "Pillow",
+    "python-dotenv",
+    "requests",
+    "tokenizers<0.21",
+]
+
+[tool.uv]
+package = false

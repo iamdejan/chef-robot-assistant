@@ -9,6 +9,7 @@ chef_robot_assistant:
   vision_min_frame_hits: 2
   vision_frame_stale_timeout_sec: 2.0
   min_ingredient_count: 2
+  idle_restart_delay_sec: 3.0
   speech_retry_limit: 3
   speech_input_device: "default"
   speech_record_seconds: 4.0
@@ -23,6 +24,7 @@ chef_robot_assistant:
   recipe_api_timeout_sec: 20.0
   recipe_temperature: 0.4
   recipe_max_output_tokens: 512
+  recipe_retry_buffer_sec: 5.0
   default_cuisine: "malay"
   image_generation_enabled: true
   tts_voice: "en"

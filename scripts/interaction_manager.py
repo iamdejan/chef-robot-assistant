@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import re
+
 import rospy
 
 from chef_robot_assistant.srv import DetectIngredients
@@ -21,6 +23,8 @@ class InteractionManager(object):
 
         self.state = "IDLE"
         self.retry_count = 0
+        self.cycle_in_progress = False
+        self.prompt_restart_after_idle = False
         self.detected_ingredients = []
         self.selected_cuisine = ""
         self.recipe_result = {}
@@ -39,6 +43,12 @@ class InteractionManager(object):
         self.min_ingredient_count = self._param("min_ingredient_count", 2)
         self.speech_retry_limit = self._param("speech_retry_limit", 3)
         self.default_cuisine = self._param("default_cuisine", "malay").lower()
+        self.idle_restart_delay_sec = float(
+            self._param("idle_restart_delay_sec", 3.0)
+        )
+        self.recipe_retry_buffer_sec = float(
+            self._param("recipe_retry_buffer_sec", 5.0)
+        )
         self.image_generation_enabled = self._param(
             "image_generation_enabled",
             True
@@ -69,8 +79,8 @@ class InteractionManager(object):
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
         self._clear_recipe_display_state()
 
-        rospy.loginfo("%s ready for foundation flow", NODE_NAME)
-        rospy.Timer(rospy.Duration(1.0), self._run_once, oneshot=True)
+        rospy.loginfo("%s ready for continuous interaction flow", NODE_NAME)
+        self._schedule_next_cycle(1.0)
 
     def _param(self, key, default):
         return rospy.get_param("/chef_robot_assistant/{0}".format(key), default)
@@ -80,6 +90,10 @@ class InteractionManager(object):
         rospy.wait_for_service(service_name, timeout=10.0)
 
     def _run_once(self, _event):
+        if self.cycle_in_progress or rospy.is_shutdown():
+            return
+
+        self.cycle_in_progress = True
         try:
             self.run_foundation_cycle()
         except rospy.ServiceException as exc:
@@ -88,6 +102,58 @@ class InteractionManager(object):
         except rospy.ROSException as exc:
             rospy.logerr("ROS runtime error: %s", exc)
             self._reset_to_idle()
+        finally:
+            self.cycle_in_progress = False
+            if (
+                self.state == "IDLE"
+                and self.prompt_restart_after_idle
+                and not rospy.is_shutdown()
+            ):
+                self._schedule_restart_confirmation(self.idle_restart_delay_sec)
+
+    def _schedule_next_cycle(self, delay_sec):
+        normalized_delay = max(0.01, float(delay_sec))
+        rospy.loginfo(
+            "Scheduling next interaction cycle in %.1f seconds",
+            max(0.0, delay_sec),
+        )
+        rospy.Timer(
+            rospy.Duration(normalized_delay),
+            self._run_once,
+            oneshot=True,
+        )
+
+    def _schedule_restart_confirmation(self, delay_sec):
+        normalized_delay = max(0.01, float(delay_sec))
+        rospy.loginfo(
+            "Scheduling next-cycle confirmation in %.1f seconds",
+            max(0.0, delay_sec),
+        )
+        rospy.Timer(
+            rospy.Duration(normalized_delay),
+            self._ask_to_start_next_cycle,
+            oneshot=True,
+        )
+
+    def _ask_to_start_next_cycle(self, _event):
+        if rospy.is_shutdown() or self.cycle_in_progress or self.state != "IDLE":
+            return
+
+        self._set_state("ASK_NEXT_CYCLE")
+        self._say("Do you want me to start again?")
+
+        self._set_state("LISTEN_NEXT_CYCLE")
+        response = self.transcribe_speech()
+        transcript = response.transcript.strip().lower() if response.success else ""
+        should_restart = self._parse_yes_no(transcript)
+
+        if should_restart:
+            self._reset_to_idle(prompt_for_next_cycle=False)
+            self._schedule_next_cycle(0.0)
+            return
+
+        self._say("I'm shutting down. Goodbye.")
+        self._reset_to_idle(prompt_for_next_cycle=False)
 
     def _set_state(self, new_state):
         self.state = new_state
@@ -123,14 +189,31 @@ class InteractionManager(object):
         rospy.set_param(base_key + "/missing_ingredients", [])
 
     def _handle_retry_exhausted_shutdown(self):
-        self._say("Retry limit exceeded. I'm shutting down. Please try again.")
+        self._say("Retry limit exceeded.")
         self._reset_to_idle()
+
+    def _extract_retry_wait_seconds(self, message):
+        match = re.search(
+            r"please retry in\s+([0-9]+(?:\.[0-9]+)?)s",
+            str(message or ""),
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return 0.0
+
+        try:
+            wait_seconds = float(match.group(1))
+        except (TypeError, ValueError):
+            return 0.0
+
+        return max(0.0, min(wait_seconds, 300.0))
 
     def _retry_service_call(
         self,
         service_name,
         attempt_fn,
         retry_notice,
+        min_wait_seconds=0.0,
     ):
         max_attempts = max(1, int(self.speech_retry_limit))
         last_response = None
@@ -144,6 +227,17 @@ class InteractionManager(object):
             if attempt_index < max_attempts - 1:
                 rospy.logwarn("%s failed: %s", service_name, response.message)
                 self._say(retry_notice)
+                wait_seconds = max(
+                    float(min_wait_seconds),
+                    self._extract_retry_wait_seconds(response.message),
+                )
+                if wait_seconds > 0.0 and not rospy.is_shutdown():
+                    rospy.loginfo(
+                        "Waiting %.1f seconds before retrying %s",
+                        wait_seconds,
+                        service_name,
+                    )
+                    rospy.sleep(wait_seconds)
 
         if last_response is not None:
             rospy.logwarn("%s failed after %d attempts: %s", service_name, max_attempts, last_response.message)
@@ -188,6 +282,12 @@ class InteractionManager(object):
             )
             rospy.sleep(1.0)
 
+        self._say(
+            "I detected {0}.".format(
+                self._format_spoken_list(self.detected_ingredients)
+            )
+        )
+
         self._set_state("ASK_CUISINE")
         self._say(
             "I am generating a recipe for you. "
@@ -205,8 +305,8 @@ class InteractionManager(object):
         if self.selected_cuisine not in VALID_CUISINES:
             self.selected_cuisine = self.default_cuisine
             self._say(
-                "Sorry, I cannot fulfill that requirement. "
-                "I will generate a recipe based on the default setting."
+                "Sorry, I cannot fulfill that request. "
+                "I will generate a recipe based on Malay cuisine."
             )
         else:
             self._say("Got it, please wait for a moment.")
@@ -218,7 +318,8 @@ class InteractionManager(object):
                 self.detected_ingredients,
                 self.selected_cuisine
             ),
-            "Recipe generation failed. I will try again."
+            "Recipe generation failed. I will try again.",
+            min_wait_seconds=self.recipe_retry_buffer_sec,
         )
         if not recipe_response.success:
             self._handle_retry_exhausted_shutdown()
@@ -313,9 +414,23 @@ class InteractionManager(object):
 
         return False
 
-    def _reset_to_idle(self):
+    def _format_spoken_list(self, items):
+        cleaned_items = [str(item).strip() for item in items if str(item).strip()]
+        if not cleaned_items:
+            return ""
+        if len(cleaned_items) == 1:
+            return cleaned_items[0]
+        if len(cleaned_items) == 2:
+            return "{0} and {1}".format(cleaned_items[0], cleaned_items[1])
+        return "{0}, and {1}".format(
+            ", ".join(cleaned_items[:-1]),
+            cleaned_items[-1],
+        )
+
+    def _reset_to_idle(self, prompt_for_next_cycle=True):
         self.state = "IDLE"
         self.retry_count = 0
+        self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
         self.selected_cuisine = ""
         self.recipe_result = {}
