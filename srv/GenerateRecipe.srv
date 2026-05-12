@@ -1,0 +1,9 @@
+string[] ingredients
+string cuisine
+---
+bool success
+string dish_name
+string spoken_summary
+string full_recipe_text
+string[] missing_ingredients
+string message

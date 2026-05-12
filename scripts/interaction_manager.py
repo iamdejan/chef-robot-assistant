@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+
+import rospy
+
+from chef_robot_assistant.srv import DetectIngredients
+from chef_robot_assistant.srv import GenerateDishImage
+from chef_robot_assistant.srv import GenerateRecipe
+from chef_robot_assistant.srv import SpeakText
+from chef_robot_assistant.srv import TranscribeSpeech
+
+
+NODE_NAME = "interaction_manager"
+VALID_CUISINES = ("malay", "western", "chinese")
+YES_WORDS = ("yes", "yeah", "yep")
+NO_WORDS = ("no", "nope")
+
+
+class InteractionManager(object):
+    def __init__(self):
+        rospy.init_node(NODE_NAME)
+
+        self.state = "IDLE"
+        self.retry_count = 0
+        self.detected_ingredients = []
+        self.selected_cuisine = ""
+        self.recipe_result = {}
+        self.image_requested = False
+
+        self.camera_topic = self._param("camera_topic", "/camera/image_raw")
+        self.camera_frame_topic_out = self._param(
+            "camera_frame_topic_out",
+            "/chef_robot_assistant/image_raw"
+        )
+        self.detection_confidence_threshold = self._param(
+            "detection_confidence_threshold",
+            0.5
+        )
+        self.capture_duration_sec = self._param("capture_duration_sec", 3.0)
+        self.min_ingredient_count = self._param("min_ingredient_count", 2)
+        self.speech_retry_limit = self._param("speech_retry_limit", 3)
+        self.default_cuisine = self._param("default_cuisine", "malay").lower()
+        self.image_generation_enabled = self._param(
+            "image_generation_enabled",
+            True
+        )
+
+        self._wait_for_service("detect_ingredients")
+        self._wait_for_service("transcribe_speech")
+        self._wait_for_service("generate_recipe")
+        self._wait_for_service("generate_dish_image")
+        self._wait_for_service("speak_text")
+
+        self.detect_ingredients = rospy.ServiceProxy(
+            "detect_ingredients",
+            DetectIngredients
+        )
+        self.transcribe_speech = rospy.ServiceProxy(
+            "transcribe_speech",
+            TranscribeSpeech
+        )
+        self.generate_recipe = rospy.ServiceProxy(
+            "generate_recipe",
+            GenerateRecipe
+        )
+        self.generate_dish_image = rospy.ServiceProxy(
+            "generate_dish_image",
+            GenerateDishImage
+        )
+        self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
+
+        rospy.loginfo("%s ready for foundation flow", NODE_NAME)
+        rospy.Timer(rospy.Duration(1.0), self._run_once, oneshot=True)
+
+    def _param(self, key, default):
+        return rospy.get_param("/chef_robot_assistant/{0}".format(key), default)
+
+    def _wait_for_service(self, service_name):
+        rospy.loginfo("Waiting for service %s", service_name)
+        rospy.wait_for_service(service_name, timeout=10.0)
+
+    def _run_once(self, _event):
+        try:
+            self.run_foundation_cycle()
+        except rospy.ServiceException as exc:
+            rospy.logerr("Service call failed: %s", exc)
+            self._reset_to_idle()
+        except rospy.ROSException as exc:
+            rospy.logerr("ROS runtime error: %s", exc)
+            self._reset_to_idle()
+
+    def _set_state(self, new_state):
+        self.state = new_state
+        rospy.loginfo("State -> %s", new_state)
+
+    def _say(self, text):
+        rospy.loginfo("Robot says: %s", text)
+        response = self.speak_text(text)
+        if not response.success:
+            rospy.logwarn("SpeakText stub returned failure: %s", response.message)
+
+    def run_foundation_cycle(self):
+        self._set_state("PROMPT_PLACE_INGREDIENTS")
+        self._say("Please place at least 2 supported ingredients in front of me.")
+
+        self._set_state("DETECT_INGREDIENTS")
+        detect_response = self.detect_ingredients()
+        if not detect_response.success:
+            rospy.logwarn("Detection failed: %s", detect_response.message)
+            self._reset_to_idle()
+            return
+
+        self.detected_ingredients = list(detect_response.ingredients)
+
+        self._set_state("CHECK_INGREDIENT_COUNT")
+        if len(self.detected_ingredients) < self.min_ingredient_count:
+            self._say(
+                "Only {0} ingredient detected. Please add more ingredients.".format(
+                    len(self.detected_ingredients)
+                )
+            )
+            self._reset_to_idle()
+            return
+
+        self._set_state("ASK_CUISINE")
+        self._say(
+            "I am generating a recipe for you. "
+            "Do you want Malay, Western or Chinese food?"
+        )
+
+        self._set_state("LISTEN_CUISINE")
+        transcript = self._capture_transcript()
+        if transcript is None:
+            self._say("Too long without user response. Please try again.")
+            self._reset_to_idle()
+            return
+
+        self._set_state("VALIDATE_CUISINE")
+        self.selected_cuisine = self._parse_cuisine(transcript)
+        if self.selected_cuisine not in VALID_CUISINES:
+            self.selected_cuisine = self.default_cuisine
+            self._say(
+                "Sorry, I cannot fulfill that requirement. "
+                "I will generate a recipe based on the default setting."
+            )
+        else:
+            self._say("Got it, please wait for a moment.")
+
+        self._set_state("GENERATE_RECIPE")
+        recipe_response = self.generate_recipe(
+            self.detected_ingredients,
+            self.selected_cuisine
+        )
+        if not recipe_response.success:
+            self._say("Sorry, some error occurred when generating a recipe.")
+            self._reset_to_idle()
+            return
+
+        self.recipe_result = {
+            "dish_name": recipe_response.dish_name,
+            "spoken_summary": recipe_response.spoken_summary,
+            "full_recipe_text": recipe_response.full_recipe_text,
+            "missing_ingredients": list(recipe_response.missing_ingredients),
+        }
+
+        self._set_state("PRESENT_RECIPE")
+        summary = self.recipe_result["spoken_summary"]
+        missing = self.recipe_result["missing_ingredients"]
+        if missing:
+            summary = "{0} You still need to buy: {1}.".format(
+                summary,
+                ", ".join(missing)
+            )
+        self._say(summary)
+        rospy.loginfo("Full recipe output:\n%s", self.recipe_result["full_recipe_text"])
+
+        if not self.image_generation_enabled:
+            self._say("Thank you for using me.")
+            self._reset_to_idle()
+            return
+
+        self._set_state("ASK_IMAGE_OPTION")
+        self._say("Do you want me to generate an image of the dish?")
+
+        self._set_state("LISTEN_IMAGE_OPTION")
+        image_transcript = self._capture_transcript()
+        self.image_requested = self._parse_yes_no(image_transcript)
+
+        if not self.image_requested:
+            self._say("Thank you for using me.")
+            self._reset_to_idle()
+            return
+
+        self._set_state("GENERATE_IMAGE")
+        image_response = self.generate_dish_image(
+            self.recipe_result["dish_name"],
+            self.recipe_result["spoken_summary"]
+        )
+        if not image_response.success:
+            self._say(
+                "Sorry, image generation failed. Here is your recipe only. Thank you."
+            )
+            self._reset_to_idle()
+            return
+
+        self._set_state("PRESENT_IMAGE")
+        rospy.loginfo("Generated image reference: %s", image_response.image_path)
+        self._say("Here is an example image of the dish. Thank you for using me.")
+        self._reset_to_idle()
+
+    def _capture_transcript(self):
+        self.retry_count = 0
+        while self.retry_count < self.speech_retry_limit and not rospy.is_shutdown():
+            response = self.transcribe_speech()
+            transcript = response.transcript.strip().lower()
+            if response.success and transcript:
+                return transcript
+
+            self.retry_count += 1
+            self._say("Sorry, I cannot hear you. Please say it again.")
+
+        return None
+
+    def _parse_cuisine(self, transcript):
+        if transcript is None:
+            return ""
+
+        for cuisine in VALID_CUISINES:
+            if cuisine in transcript:
+                return cuisine
+        return ""
+
+    def _parse_yes_no(self, transcript):
+        if transcript is None:
+            return False
+
+        if any(word in transcript for word in YES_WORDS):
+            return True
+
+        if any(word in transcript for word in NO_WORDS):
+            return False
+
+        return False
+
+    def _reset_to_idle(self):
+        self.state = "IDLE"
+        self.retry_count = 0
+        self.detected_ingredients = []
+        self.selected_cuisine = ""
+        self.recipe_result = {}
+        self.image_requested = False
+        rospy.loginfo("State -> IDLE")
+
+
+def main():
+    InteractionManager()
+    rospy.spin()
+
+
+if __name__ == "__main__":
+    main()
