@@ -44,3 +44,9 @@ Before setting up this repository, ensure the following requirements are met:
    catkin_make
    source devel/setup.bash
    ```
+
+5. Install Python dependencies listed in `requirements.txt`:
+
+   ```bash
+   pip3 install -r requirements.txt
+   ```
