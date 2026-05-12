@@ -1,4 +1,4 @@
-# Runtime dependencies for the vision and speech branches.
+# Runtime dependencies for the vision, speech, and recipe branches.
 # Install ROS Noetic system packages on Ubuntu 20.04 first, then install these
 # Python packages inside the robot's Python 3.8 environment.
 faster-whisper
@@ -6,3 +6,4 @@ inference-sdk
 numpy
 opencv-python<=4.10.0.84,>=4.8.1.78
 python-dotenv
+requests

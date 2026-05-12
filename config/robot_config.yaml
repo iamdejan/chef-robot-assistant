@@ -14,9 +14,14 @@ chef_robot_assistant:
   speech_record_seconds: 4.0
   speech_sample_rate_hz: 16000
   speech_channels: 1
+  speech_silence_rms_threshold: 150.0
   speech_model_name: "small"
   speech_compute_type: "int8"
   speech_language: ""
   speech_beam_size: 1
+  recipe_model_name: "gemini-2.5-flash-lite"
+  recipe_api_timeout_sec: 20.0
+  recipe_temperature: 0.4
+  recipe_max_output_tokens: 512
   default_cuisine: "malay"
   image_generation_enabled: true
