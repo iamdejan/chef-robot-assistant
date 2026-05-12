@@ -1,29 +1,6 @@
 <launch>
   <rosparam command="load" file="$(find chef_robot_assistant)/config/robot_config.yaml" />
 
-  <arg name="video_device" default="/dev/video0" />
-  <arg name="image_width" default="640" />
-  <arg name="image_height" default="480" />
-  <arg name="fps" default="30.0" />
-  <arg name="camera_frame_id" default="usb_cam" />
-  <arg name="swap_rb_channels" default="true" />
-
-  <param name="/chef_robot_assistant/camera_topic" value="/usb_cam/image_raw" />
-
-  <node
-    name="webcam_node"
-    pkg="chef_robot_assistant"
-    type="webcam_node.py"
-    output="screen"
-  >
-    <param name="video_device" value="$(arg video_device)" />
-    <param name="image_width" value="$(arg image_width)" />
-    <param name="image_height" value="$(arg image_height)" />
-    <param name="fps" value="$(arg fps)" />
-    <param name="camera_frame_id" value="$(arg camera_frame_id)" />
-    <param name="swap_rb_channels" value="$(arg swap_rb_channels)" />
-  </node>
-
   <node
     pkg="chef_robot_assistant"
     type="interaction_manager.py"
