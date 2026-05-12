@@ -67,6 +67,7 @@ class InteractionManager(object):
             GenerateDishImage
         )
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
+        self._clear_recipe_display_state()
 
         rospy.loginfo("%s ready for foundation flow", NODE_NAME)
         rospy.Timer(rospy.Duration(1.0), self._run_once, oneshot=True)
@@ -96,30 +97,96 @@ class InteractionManager(object):
         rospy.loginfo("Robot says: %s", text)
         response = self.speak_text(text)
         if not response.success:
-            rospy.logwarn("SpeakText stub returned failure: %s", response.message)
+            rospy.logwarn("SpeakText returned failure: %s", response.message)
+
+    def _publish_recipe_display_state(self):
+        base_key = "/chef_robot_assistant/last_recipe"
+        rospy.set_param(base_key + "/dish_name", self.recipe_result.get("dish_name", ""))
+        rospy.set_param(
+            base_key + "/spoken_summary",
+            self.recipe_result.get("spoken_summary", ""),
+        )
+        rospy.set_param(
+            base_key + "/full_recipe_text",
+            self.recipe_result.get("full_recipe_text", ""),
+        )
+        rospy.set_param(
+            base_key + "/missing_ingredients",
+            list(self.recipe_result.get("missing_ingredients", [])),
+        )
+
+    def _clear_recipe_display_state(self):
+        base_key = "/chef_robot_assistant/last_recipe"
+        rospy.set_param(base_key + "/dish_name", "")
+        rospy.set_param(base_key + "/spoken_summary", "")
+        rospy.set_param(base_key + "/full_recipe_text", "")
+        rospy.set_param(base_key + "/missing_ingredients", [])
+
+    def _handle_retry_exhausted_shutdown(self):
+        self._say("Retry limit exceeded. I'm shutting down. Please try again.")
+        self._reset_to_idle()
+
+    def _retry_service_call(
+        self,
+        service_name,
+        attempt_fn,
+        retry_notice,
+    ):
+        max_attempts = max(1, int(self.speech_retry_limit))
+        last_response = None
+
+        for attempt_index in range(max_attempts):
+            response = attempt_fn()
+            last_response = response
+            if response.success:
+                return response
+
+            if attempt_index < max_attempts - 1:
+                rospy.logwarn("%s failed: %s", service_name, response.message)
+                self._say(retry_notice)
+
+        if last_response is not None:
+            rospy.logwarn("%s failed after %d attempts: %s", service_name, max_attempts, last_response.message)
+        return last_response
+
+    def _is_retryable_detection_failure(self, message):
+        normalized = str(message or "").strip().lower()
+        retryable_markers = (
+            "no stable ingredient detections found",
+            "no detections were captured during",
+        )
+        return any(marker in normalized for marker in retryable_markers)
 
     def run_foundation_cycle(self):
         self._set_state("PROMPT_PLACE_INGREDIENTS")
         self._say("Please place at least 2 supported ingredients in front of me.")
 
-        self._set_state("DETECT_INGREDIENTS")
-        detect_response = self.detect_ingredients()
-        if not detect_response.success:
-            rospy.logwarn("Detection failed: %s", detect_response.message)
-            self._reset_to_idle()
-            return
+        while not rospy.is_shutdown():
+            self._set_state("DETECT_INGREDIENTS")
+            detect_response = self.detect_ingredients()
+            if not detect_response.success:
+                rospy.logwarn("Detection failed: %s", detect_response.message)
+                if self._is_retryable_detection_failure(detect_response.message):
+                    self._say(
+                        "No supported ingredients detected. Please place ingredients in front of me."
+                    )
+                    rospy.sleep(1.0)
+                    continue
+                self._reset_to_idle()
+                return
 
-        self.detected_ingredients = list(detect_response.ingredients)
+            self.detected_ingredients = list(detect_response.ingredients)
 
-        self._set_state("CHECK_INGREDIENT_COUNT")
-        if len(self.detected_ingredients) < self.min_ingredient_count:
+            self._set_state("CHECK_INGREDIENT_COUNT")
+            if len(self.detected_ingredients) >= self.min_ingredient_count:
+                break
+
             self._say(
                 "Only {0} ingredient detected. Please add more ingredients.".format(
                     len(self.detected_ingredients)
                 )
             )
-            self._reset_to_idle()
-            return
+            rospy.sleep(1.0)
 
         self._set_state("ASK_CUISINE")
         self._say(
@@ -130,8 +197,7 @@ class InteractionManager(object):
         self._set_state("LISTEN_CUISINE")
         transcript = self._capture_transcript()
         if transcript is None:
-            self._say("Too long without user response. Please try again.")
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self._set_state("VALIDATE_CUISINE")
@@ -146,13 +212,16 @@ class InteractionManager(object):
             self._say("Got it, please wait for a moment.")
 
         self._set_state("GENERATE_RECIPE")
-        recipe_response = self.generate_recipe(
-            self.detected_ingredients,
-            self.selected_cuisine
+        recipe_response = self._retry_service_call(
+            "Recipe generation",
+            lambda: self.generate_recipe(
+                self.detected_ingredients,
+                self.selected_cuisine
+            ),
+            "Recipe generation failed. I will try again."
         )
         if not recipe_response.success:
-            self._say("Sorry, some error occurred when generating a recipe.")
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self.recipe_result = {
@@ -165,6 +234,7 @@ class InteractionManager(object):
         self._set_state("PRESENT_RECIPE")
         summary = self.recipe_result["spoken_summary"]
         missing = self.recipe_result["missing_ingredients"]
+        self._publish_recipe_display_state()
         if missing:
             summary = "{0} You still need to buy: {1}.".format(
                 summary,
@@ -191,15 +261,16 @@ class InteractionManager(object):
             return
 
         self._set_state("GENERATE_IMAGE")
-        image_response = self.generate_dish_image(
-            self.recipe_result["dish_name"],
-            self.recipe_result["spoken_summary"]
+        image_response = self._retry_service_call(
+            "Image generation",
+            lambda: self.generate_dish_image(
+                self.recipe_result["dish_name"],
+                self.recipe_result["spoken_summary"]
+            ),
+            "Image generation failed. I will try again."
         )
         if not image_response.success:
-            self._say(
-                "Sorry, image generation failed. Here is your recipe only. Thank you."
-            )
-            self._reset_to_idle()
+            self._handle_retry_exhausted_shutdown()
             return
 
         self._set_state("PRESENT_IMAGE")
@@ -216,7 +287,8 @@ class InteractionManager(object):
                 return transcript
 
             self.retry_count += 1
-            self._say("Sorry, I cannot hear you. Please say it again.")
+            if self.retry_count < self.speech_retry_limit:
+                self._say("Sorry, I cannot hear you. Please say it again.")
 
         return None
 
@@ -248,6 +320,7 @@ class InteractionManager(object):
         self.selected_cuisine = ""
         self.recipe_result = {}
         self.image_requested = False
+        self._clear_recipe_display_state()
         rospy.loginfo("State -> IDLE")
 
 
