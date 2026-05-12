@@ -10,5 +10,13 @@ chef_robot_assistant:
   vision_frame_stale_timeout_sec: 2.0
   min_ingredient_count: 2
   speech_retry_limit: 3
+  speech_input_device: "default"
+  speech_record_seconds: 4.0
+  speech_sample_rate_hz: 16000
+  speech_channels: 1
+  speech_model_name: "small"
+  speech_compute_type: "int8"
+  speech_language: ""
+  speech_beam_size: 1
   default_cuisine: "malay"
   image_generation_enabled: true
