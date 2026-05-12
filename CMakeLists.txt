@@ -42,5 +42,6 @@ catkin_install_python(PROGRAMS
   scripts/recipe_node.py
   scripts/speech_node.py
   scripts/vision_node.py
+  scripts/webcam_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
