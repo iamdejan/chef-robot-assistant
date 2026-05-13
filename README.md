@@ -47,6 +47,9 @@ Before setting up this repository, ensure the following requirements are met:
 
    ```bash
    cd ~/catkin_ws
+   sudo apt install python3-rosdep
+   sudo rosdep init # only run once after installing ROS.
+   rosdep update --include-eol-distros # only run once after installing ROS.
    rosdep install --from-paths src --ignore-src -r -y
    ```
 
