@@ -47,4 +47,11 @@
     name="media_node"
     output="screen"
   />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="vision_display_node.py"
+    name="vision_display_node"
+    output="screen"
+  />
 </launch>
