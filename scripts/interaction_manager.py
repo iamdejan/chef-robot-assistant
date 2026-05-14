@@ -87,7 +87,7 @@ class InteractionManager(object):
 
     def _wait_for_service(self, service_name):
         rospy.loginfo("Waiting for service %s", service_name)
-        rospy.wait_for_service(service_name, timeout=10.0)
+        rospy.wait_for_service(service_name, timeout=60.0)
 
     def _run_once(self, _event):
         if self.cycle_in_progress or rospy.is_shutdown():
