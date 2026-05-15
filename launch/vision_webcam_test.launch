@@ -8,7 +8,7 @@
   <arg name="camera_frame_id" default="usb_cam" />
   <arg name="preview_topic" default="/usb_cam/image_raw" />
   <arg name="swap_rb_channels" default="true" />
-  <arg name="openai_vision_model" default="gpt-5.1" />
+  <arg name="openai_vision_model" default="gpt-5.4" />
   <arg name="openai_vision_api_timeout_sec" default="30.0" />
   <arg name="openai_vision_image_detail" default="high" />
   <arg name="confidence_threshold" default="0.25" />

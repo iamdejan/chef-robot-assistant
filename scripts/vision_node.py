@@ -73,8 +73,8 @@ class VisionNode(object):
             self._param("vision_frame_stale_timeout_sec", 2.0)
         )
         self.openai_vision_model = str(
-            self._param("openai_vision_model", "gpt-5.1")
-        ).strip() or "gpt-5.1"
+            self._param("openai_vision_model", "gpt-5.4")
+        ).strip() or "gpt-5.4"
         self.openai_vision_api_timeout_sec = float(
             self._param("openai_vision_api_timeout_sec", 30.0)
         )
