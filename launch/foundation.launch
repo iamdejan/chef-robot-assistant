@@ -10,6 +10,7 @@
 
   <param name="/chef_robot_assistant/camera_topic" value="/usb_cam/image_raw" />
 
+  <!-- when enabling usb_cam-test, comment out this <node> tag -->
   <node
     name="webcam_node"
     pkg="chef_robot_assistant"
@@ -23,6 +24,10 @@
     <param name="camera_frame_id" value="$(arg camera_frame_id)" />
     <param name="swap_rb_channels" value="$(arg swap_rb_channels)" />
   </node>
+
+  <!-- use this only for testing -->
+  <!-- <include file="$(find usb_cam)/launch/usb_cam-test.launch">
+  </include> -->
 
   <node
     pkg="chef_robot_assistant"
@@ -56,6 +61,13 @@
     pkg="chef_robot_assistant"
     type="media_node.py"
     name="media_node"
+    output="screen"
+  />
+
+  <node
+    pkg="chef_robot_assistant"
+    type="vision_display_node.py"
+    name="vision_display_node"
     output="screen"
   />
 </launch>
