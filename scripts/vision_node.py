@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
+import base64
+import json
 import os
+import re
 import threading
 from collections import Counter
 
@@ -30,15 +33,16 @@ else:
     NUMPY_IMPORT_ERROR = ""
 
 try:
-    from inference_sdk import InferenceHTTPClient
+    import requests
 except ImportError as exc:
-    InferenceHTTPClient = None
-    ROBOFLOW_IMPORT_ERROR = str(exc)
+    requests = None
+    REQUESTS_IMPORT_ERROR = str(exc)
 else:
-    ROBOFLOW_IMPORT_ERROR = ""
+    REQUESTS_IMPORT_ERROR = ""
 
 
 NODE_NAME = "vision_node"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
 class VisionNode(object):
@@ -58,14 +62,6 @@ class VisionNode(object):
             self._param("detection_confidence_threshold", 0.5)
         )
         self.capture_duration_sec = float(self._param("capture_duration_sec", 3.0))
-        self.vision_workspace_name = self._param(
-            "vision_workspace_name",
-            "lee-zhi-yang"
-        )
-        self.vision_workflow_id = self._param(
-            "vision_workflow_id",
-            "ingredient-detection-api"
-        )
         self.vision_sample_frame_count = int(
             self._param("vision_sample_frame_count", 10)
         )
@@ -76,9 +72,30 @@ class VisionNode(object):
         self.vision_frame_stale_timeout_sec = float(
             self._param("vision_frame_stale_timeout_sec", 2.0)
         )
+        self.openai_vision_model = str(
+            self._param("openai_vision_model", "gpt-5.1")
+        ).strip() or "gpt-5.1"
+        self.openai_vision_api_timeout_sec = float(
+            self._param("openai_vision_api_timeout_sec", 30.0)
+        )
+        self.openai_vision_image_detail = str(
+            self._param("openai_vision_image_detail", "high")
+        ).strip().lower() or "high"
+        self.openai_vision_max_output_tokens = int(
+            self._param("openai_vision_max_output_tokens", 1200)
+        )
+        self.openai_vision_temperature = float(
+            self._param("openai_vision_temperature", 0.0)
+        )
+        self.openai_vision_jpeg_quality = int(
+            self._param("openai_vision_jpeg_quality", 85)
+        )
+        self.openai_vision_prompt = str(
+            self._param("openai_vision_prompt", "")
+        ).strip()
         self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.dotenv_path = os.path.join(self.repo_root, ".env")
-        self.roboflow_api_key = ""
+        self.openai_api_key = ""
         self.latest_frame = None
         self.latest_frame_header = None
 
@@ -86,7 +103,7 @@ class VisionNode(object):
         self.latest_frame_error = ""
         self.last_inference_error = ""
 
-        self.client = None
+        self.client_ready = False
         self.client_error = ""
 
         self.debug_publisher = rospy.Publisher(
@@ -110,10 +127,11 @@ class VisionNode(object):
         self._ensure_client_loaded(log_error=True)
 
         rospy.loginfo(
-            "%s listening on %s and publishing debug frames to %s",
+            "%s listening on %s and publishing debug frames to %s using OpenAI model %s",
             NODE_NAME,
             self.camera_topic,
-            self.camera_frame_topic_out
+            self.camera_frame_topic_out,
+            self.openai_vision_model,
         )
 
     def _param(self, key, default):
@@ -121,44 +139,26 @@ class VisionNode(object):
 
     def _ensure_client_loaded(self, log_error):
         with self.client_lock:
-            if self.client is not None:
-                return self.client
+            if self.client_ready:
+                return True
 
             dependency_error = self._dependency_error_message()
             if dependency_error:
                 self.client_error = dependency_error
-            elif not self.vision_workspace_name:
-                self.client_error = "vision_workspace_name is not set"
-            elif not self.vision_workflow_id:
-                self.client_error = "vision_workflow_id is not set"
             else:
-                self.roboflow_api_key, self.client_error = self._read_roboflow_api_key()
-                if self.roboflow_api_key:
-                    try:
-                        self.client = InferenceHTTPClient(
-                            api_url="https://serverless.roboflow.com",
-                            api_key=self.roboflow_api_key
-                        )
-                        self.client_error = ""
-                        rospy.loginfo(
-                            "Configured Roboflow workflow client for %s/%s",
-                            self.vision_workspace_name,
-                            self.vision_workflow_id
-                        )
-                    except Exception as exc:
-                        self.client = None
-                        self.client_error = (
-                            "failed to initialize Roboflow workflow client for {0}/{1}: {2}".format(
-                                self.vision_workspace_name,
-                                self.vision_workflow_id,
-                                exc
-                            )
-                        )
+                self.openai_api_key, self.client_error = self._read_openai_api_key()
+                if self.openai_api_key:
+                    self.client_ready = True
+                    self.client_error = ""
+                    rospy.loginfo(
+                        "Configured OpenAI ingredient detector with model %s",
+                        self.openai_vision_model,
+                    )
 
-            if self.client is None and log_error and self.client_error:
+            if not self.client_ready and log_error and self.client_error:
                 rospy.logerr(self.client_error)
 
-            return self.client
+            return self.client_ready
 
     def _dependency_error_message(self):
         errors = []
@@ -166,15 +166,19 @@ class VisionNode(object):
             errors.append("opencv-python import failed: {0}".format(CV2_IMPORT_ERROR))
         if NUMPY_IMPORT_ERROR:
             errors.append("numpy import failed: {0}".format(NUMPY_IMPORT_ERROR))
-        if ROBOFLOW_IMPORT_ERROR:
-            errors.append(
-                "roboflow inference-sdk import failed: {0}".format(ROBOFLOW_IMPORT_ERROR)
-            )
+        if REQUESTS_IMPORT_ERROR:
+            errors.append("requests import failed: {0}".format(REQUESTS_IMPORT_ERROR))
         return "; ".join(errors)
 
-    def _read_roboflow_api_key(self):
+    def _read_openai_api_key(self):
+        env_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        if env_key:
+            return env_key, ""
+
         if not os.path.isfile(self.dotenv_path):
-            return "", "dotenv file not found at {0}".format(self.dotenv_path)
+            return "", "OPENAI_API_KEY is not set and dotenv file was not found at {0}".format(
+                self.dotenv_path
+            )
 
         try:
             dotenv_map = dotenv_values(self.dotenv_path)
@@ -184,9 +188,9 @@ class VisionNode(object):
                 exc
             )
 
-        api_key = str(dotenv_map.get("ROBOFLOW_API_KEY", "")).strip()
+        api_key = str(dotenv_map.get("OPENAI_API_KEY", "")).strip()
         if not api_key:
-            return "", "ROBOFLOW_API_KEY is missing from {0}".format(
+            return "", "OPENAI_API_KEY is missing from environment and {0}".format(
                 self.dotenv_path
             )
 
@@ -217,94 +221,284 @@ class VisionNode(object):
         return rospy.Time.now().to_sec()
 
     def _run_inference(self, frame):
-        client = self._ensure_client_loaded(log_error=False)
-        if client is None:
+        if not self._ensure_client_loaded(log_error=False):
             return [], None, self.client_error
 
+        image_data_url, encode_error = self._encode_frame_as_data_url(frame)
+        if encode_error:
+            return [], None, encode_error
+
+        payload = self._build_openai_payload(frame, image_data_url)
+        headers = {
+            "Authorization": "Bearer {0}".format(self.openai_api_key),
+            "Content-Type": "application/json",
+        }
+
         try:
-            result = client.run_workflow(
-                workspace_name=self.vision_workspace_name,
-                workflow_id=self.vision_workflow_id,
-                images={"image": frame},
-                use_cache=True
+            response = requests.post(
+                OPENAI_RESPONSES_URL,
+                headers=headers,
+                json=payload,
+                timeout=self.openai_vision_api_timeout_sec,
             )
-        except Exception as exc:
-            return [], None, "workflow inference failed for {0}/{1}: {2}".format(
-                self.vision_workspace_name,
-                self.vision_workflow_id,
-                exc
-            )
+        except requests.exceptions.Timeout:
+            return [], None, "OpenAI vision request timed out"
+        except requests.exceptions.RequestException as exc:
+            return [], None, "OpenAI vision request failed: {0}".format(exc)
 
-        predictions = self._extract_workflow_predictions(result)
-        detections = []
+        parsed_response, response_error = self._parse_openai_http_response(response)
+        if response_error:
+            return [], None, response_error
 
-        for prediction in predictions:
-            confidence = float(prediction.get("confidence", 0.0))
-            if confidence < self.detection_confidence_threshold:
-                continue
-
-            x_center = float(prediction.get("x", 0.0))
-            y_center = float(prediction.get("y", 0.0))
-            width = float(prediction.get("width", 0.0))
-            height = float(prediction.get("height", 0.0))
-
-            x1 = int(x_center - (width / 2.0))
-            y1 = int(y_center - (height / 2.0))
-            x2 = int(x_center + (width / 2.0))
-            y2 = int(y_center + (height / 2.0))
-
-            label = str(prediction.get("class", "")).strip().lower()
-            if not label:
-                continue
-
-            detections.append({
-                "label": label,
-                "confidence": confidence,
-                "xyxy": [x1, y1, x2, y2],
-            })
+        detections, parse_error = self._parse_openai_detections(parsed_response, frame)
+        if parse_error:
+            return [], None, parse_error
 
         annotated_frame = self._annotate_frame(frame, detections)
         return detections, annotated_frame, ""
 
-    def _extract_workflow_predictions(self, payload):
-        direct_predictions = self._coerce_predictions(payload)
-        if direct_predictions:
-            return direct_predictions
+    def _encode_frame_as_data_url(self, frame):
+        if cv2 is None:
+            return "", "opencv-python is unavailable; cannot encode image for OpenAI"
 
-        queue = [payload]
-        while queue:
-            current = queue.pop(0)
+        quality = max(50, min(100, int(self.openai_vision_jpeg_quality)))
+        ok, buffer = cv2.imencode(
+            ".jpg",
+            frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+        )
+        if not ok:
+            return "", "failed to encode camera frame as JPEG"
 
-            if isinstance(current, dict):
-                nested_predictions = self._coerce_predictions(current)
-                if nested_predictions:
-                    return nested_predictions
-                queue.extend(current.values())
-            elif isinstance(current, list):
-                queue.extend(current)
+        image_base64 = base64.b64encode(buffer.tobytes()).decode("ascii")
+        return "data:image/jpeg;base64,{0}".format(image_base64), ""
 
-        return []
+    def _build_openai_payload(self, frame, image_data_url):
+        height, width = frame.shape[:2]
+        prompt = self._build_detection_prompt(width, height)
+        text_format = {
+            "format": {
+                "type": "json_schema",
+                "name": "ingredient_detection_result",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "detections": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "class": {
+                                        "type": "string",
+                                        "description": "Lowercase ingredient name, for example egg, tomato, onion, rice, bread."
+                                    },
+                                    "confidence": {
+                                        "type": "number",
+                                        "minimum": 0.0,
+                                        "maximum": 1.0
+                                    },
+                                    "x": {
+                                        "type": "number",
+                                        "description": "Bounding box center x in pixels."
+                                    },
+                                    "y": {
+                                        "type": "number",
+                                        "description": "Bounding box center y in pixels."
+                                    },
+                                    "width": {
+                                        "type": "number",
+                                        "description": "Bounding box width in pixels."
+                                    },
+                                    "height": {
+                                        "type": "number",
+                                        "description": "Bounding box height in pixels."
+                                    }
+                                },
+                                "required": ["class", "confidence", "x", "y", "width", "height"]
+                            }
+                        }
+                    },
+                    "required": ["detections"]
+                }
+            }
+        }
 
-    def _coerce_predictions(self, payload):
-        if not isinstance(payload, dict):
-            return []
+        return {
+            "model": self.openai_vision_model,
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": prompt,
+                        },
+                        {
+                            "type": "input_image",
+                            "image_url": image_data_url,
+                            "detail": self.openai_vision_image_detail,
+                        },
+                    ],
+                }
+            ],
+            "text": text_format,
+            "temperature": self.openai_vision_temperature,
+            "max_output_tokens": self.openai_vision_max_output_tokens,
+        }
 
-        predictions = payload.get("predictions", [])
-        if not isinstance(predictions, list):
-            return []
+    def _build_detection_prompt(self, image_width, image_height):
+        custom_prompt = ""
+        if self.openai_vision_prompt:
+            custom_prompt = "\nAdditional user guidance: {0}\n".format(
+                self.openai_vision_prompt
+            )
 
-        normalized = []
-        for prediction in predictions:
-            if not isinstance(prediction, dict):
+        return (
+            "You are the vision module for a ROS Noetic chef robot. "
+            "Detect visible raw food ingredients in the image. "
+            "Return only real edible ingredients that are clearly visible. "
+            "Do not return plates, bowls, hands, table surfaces, packaging, utensils, background objects, or cooked dish names. "
+            "Use simple lowercase singular class names such as egg, tomato, onion, garlic, chicken, fish, rice, bread, carrot, potato, lettuce, cucumber, beef, cheese, milk, lemon, chili, mushroom. "
+            "For each ingredient, estimate a bounding box in pixel coordinates for the full image size {0}x{1}. "
+            "The fields x and y must be the bounding box center, matching Roboflow's output style. "
+            "If you are not confident about an object, omit it instead of guessing. "
+            "Return JSON that matches the requested schema exactly."
+            "{2}"
+        ).format(image_width, image_height, custom_prompt)
+
+    def _parse_openai_http_response(self, response):
+        try:
+            response_json = response.json()
+        except ValueError:
+            response_json = None
+
+        if response.status_code >= 400:
+            error_message = ""
+            if isinstance(response_json, dict):
+                error_message = str(
+                    response_json.get("error", {}).get("message", "") or ""
+                ).strip()
+            if not error_message:
+                error_message = response.text.strip() or "unknown OpenAI API error"
+            return None, "OpenAI API returned {0}: {1}".format(
+                response.status_code,
+                error_message,
+            )
+
+        if not isinstance(response_json, dict):
+            return None, "OpenAI API returned a non-JSON response"
+
+        output_text = str(response_json.get("output_text", "") or "").strip()
+        if not output_text:
+            output_text = self._extract_output_text(response_json)
+
+        if not output_text:
+            return None, "OpenAI API returned no output text"
+
+        try:
+            return json.loads(output_text), ""
+        except ValueError as exc:
+            return None, "OpenAI detection output was not valid JSON: {0}; output was: {1}".format(
+                exc,
+                output_text[:500],
+            )
+
+    def _extract_output_text(self, response_json):
+        text_parts = []
+        for output_item in response_json.get("output", []):
+            if not isinstance(output_item, dict):
                 continue
-            if self._looks_like_detection_prediction(prediction):
-                normalized.append(prediction)
+            for content_item in output_item.get("content", []):
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") in ("output_text", "text"):
+                    text = content_item.get("text", "")
+                    if text:
+                        text_parts.append(text)
+        return "\n".join(text_parts).strip()
 
-        return normalized
+    def _parse_openai_detections(self, payload, frame):
+        if not isinstance(payload, dict):
+            return [], "OpenAI detection JSON must be an object"
 
-    def _looks_like_detection_prediction(self, prediction):
-        required_keys = ("class", "confidence", "x", "y", "width", "height")
-        return all(key in prediction for key in required_keys)
+        raw_detections = payload.get("detections", [])
+        if not isinstance(raw_detections, list):
+            return [], "OpenAI detection JSON field 'detections' must be a list"
+
+        frame_height, frame_width = frame.shape[:2]
+        detections = []
+        for raw in raw_detections:
+            detection, error = self._normalize_detection(raw, frame_width, frame_height)
+            if error:
+                rospy.logwarn_throttle(5.0, "Skipping malformed OpenAI detection: %s", error)
+                continue
+            if detection["confidence"] < self.detection_confidence_threshold:
+                continue
+            detections.append(detection)
+
+        return detections, ""
+
+    def _normalize_detection(self, raw, frame_width, frame_height):
+        if not isinstance(raw, dict):
+            return None, "detection is not an object"
+
+        label = self._normalize_label(raw.get("class", ""))
+        if not label:
+            return None, "missing class label"
+
+        try:
+            confidence = float(raw.get("confidence", 0.0))
+            x_center = float(raw.get("x", 0.0))
+            y_center = float(raw.get("y", 0.0))
+            width = float(raw.get("width", 0.0))
+            height = float(raw.get("height", 0.0))
+        except (TypeError, ValueError) as exc:
+            return None, "non-numeric confidence or bounding box: {0}".format(exc)
+
+        if width <= 0.0 or height <= 0.0:
+            return None, "non-positive bounding box size"
+
+        confidence = max(0.0, min(1.0, confidence))
+        x_center = max(0.0, min(float(frame_width - 1), x_center))
+        y_center = max(0.0, min(float(frame_height - 1), y_center))
+        width = max(1.0, min(float(frame_width), width))
+        height = max(1.0, min(float(frame_height), height))
+
+        x1 = int(round(x_center - (width / 2.0)))
+        y1 = int(round(y_center - (height / 2.0)))
+        x2 = int(round(x_center + (width / 2.0)))
+        y2 = int(round(y_center + (height / 2.0)))
+
+        x1 = max(0, min(frame_width - 1, x1))
+        y1 = max(0, min(frame_height - 1, y1))
+        x2 = max(0, min(frame_width - 1, x2))
+        y2 = max(0, min(frame_height - 1, y2))
+
+        if x2 <= x1 or y2 <= y1:
+            return None, "empty bounding box after clipping"
+
+        return {
+            "label": label,
+            "confidence": confidence,
+            "xyxy": [x1, y1, x2, y2],
+            "roboflow_like": {
+                "class": label,
+                "confidence": confidence,
+                "x": x_center,
+                "y": y_center,
+                "width": width,
+                "height": height,
+            },
+        }, ""
+
+    def _normalize_label(self, label):
+        cleaned = re.sub(r"[^a-z0-9\s_-]", " ", str(label).strip().lower())
+        cleaned = cleaned.replace("_", " ").replace("-", " ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
 
     def _annotate_frame(self, frame, detections):
         if cv2 is None or np is None:
@@ -346,8 +540,7 @@ class VisionNode(object):
         self.debug_publisher.publish(debug_image)
 
     def handle_detect(self, _request):
-        client = self._ensure_client_loaded(log_error=True)
-        if client is None:
+        if not self._ensure_client_loaded(log_error=True):
             return DetectIngredientsResponse(
                 success=False,
                 ingredients=[],
