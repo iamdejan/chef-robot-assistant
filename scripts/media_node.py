@@ -434,7 +434,7 @@ class MediaNode(object):
 
         try:
             client = InferenceClient(
-                provider="auto",
+                provider="replicate", # can use pay-as-you-go credits
                 api_key=token,
                 timeout=self.image_api_timeout_sec,
             )
