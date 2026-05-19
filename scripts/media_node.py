@@ -155,6 +155,7 @@ class MediaNode(object):
         token = str(dotenv_map.get("HF_TOKEN", "")).strip()
         if not token:
             return "", "HF_TOKEN is missing from {0}".format(self.dotenv_path)
+
         return token, ""
 
     def _load_recipe_display_data(self):
@@ -433,7 +434,7 @@ class MediaNode(object):
 
         try:
             client = InferenceClient(
-                provider="auto",
+                provider="replicate", # can use pay-as-you-go credits
                 api_key=token,
                 timeout=self.image_api_timeout_sec,
             )
