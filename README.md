@@ -81,7 +81,7 @@ Before setting up this repository, ensure the following requirements are met:
 
 ### Running the System
 
-After setup, run this:
+After setup, run these commands in sequence:
 ```bash
 cd ~/catkin_ws
 source devel/setup.bash
