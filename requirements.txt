@@ -2,14 +2,17 @@
 # Install ROS Noetic system packages on Ubuntu 20.04 first, then install these
 # Python packages inside the robot's Python 3.8 environment.
 
-faster-whisper
+faster-whisper==1.1.0
 huggingface_hub>=0.36.2
 inference-sdk
-numpy
+numpy==1.24.4
 opencv-python<=4.10.0.84,>=4.8.1.78
 Pillow
 python-dotenv
 requests
 tokenizers<0.21
 transformers==4.46.3
-spicy==0.16.0
+scipy==1.10.0
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1

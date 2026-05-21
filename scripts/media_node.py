@@ -3,11 +3,21 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import textwrap
 import time
 
 import numpy as np
 import rospy
+
+try:
+    from transformers import pipeline
+    import scipy.io.wavfile
+    BARK_AVAILABLE = True
+except ImportError as exc:
+    pipeline = None
+    BARK_AVAILABLE = False
+    BARK_IMPORT_ERROR = str(exc)
 
 from chef_robot_assistant.srv import GenerateDishImage
 from chef_robot_assistant.srv import GenerateDishImageResponse
@@ -75,7 +85,8 @@ class MediaNode(object):
         self.image_width = int(self._param("image_width", 1024))
         self.image_height = int(self._param("image_height", 1024))
 
-        self.espeak_path = shutil.which("espeak")
+        self.bark_pipeline = None
+        self.aplay_path = shutil.which("aplay")
         self.current_recipe_data = None
         self.current_spoken_text = ""
         self.current_image = None
@@ -394,31 +405,91 @@ class MediaNode(object):
         except cv2.error:
             pass
 
-    def _speak_text(self, text):
-        if not self.espeak_path:
-            raise RuntimeError("espeak is not available on this machine.")
+    def _load_bark_pipeline(self):
+        """Load the Suno Bark text-to-speech pipeline lazily.
 
-        command = [
-            self.espeak_path,
-            "-v",
-            self.tts_voice,
-            "-s",
-            str(self.tts_speed_wpm),
-            text,
-        ]
+        This method initializes the Bark TTS model on first use and caches
+        it for subsequent calls.
+
+        Returns
+        -------
+        transformers.Pipeline
+            The initialized Bark TTS pipeline.
+
+        Raises
+        ------
+        RuntimeError
+            If the required ``transformers`` or ``scipy`` dependencies are
+            not available.
+        """
+        if self.bark_pipeline is not None:
+            return self.bark_pipeline
+
+        if not BARK_AVAILABLE:
+            raise RuntimeError(
+                "Bark TTS dependencies are missing: {0}".format(BARK_IMPORT_ERROR)
+            )
+
+        rospy.loginfo("Loading Suno Bark text-to-speech model...")
+        self.bark_pipeline = pipeline("text-to-speech", "suno/bark")
+        rospy.loginfo("Suno Bark model loaded.")
+        return self.bark_pipeline
+
+    def _speak_text(self, text):
+        """Synthesize and play speech using Suno Bark.
+
+        Parameters
+        ----------
+        text : str
+            The text to speak aloud.
+
+        Raises
+        ------
+        RuntimeError
+            If ``aplay`` is unavailable, Bark dependencies are missing,
+            synthesis fails, or audio playback fails.
+        """
+        if not self.aplay_path:
+            raise RuntimeError("aplay is not available on this machine.")
+
+        synthesiser = self._load_bark_pipeline()
+
+        fd, wav_path = tempfile.mkstemp(
+            prefix="chef_robot_assistant_bark_",
+            suffix=".wav",
+        )
+        os.close(fd)
+
         try:
+            speech = synthesiser(text, forward_params={"do_sample": True})
+            scipy.io.wavfile.write(
+                wav_path,
+                rate=speech["sampling_rate"],
+                data=speech["audio"],
+            )
+
+            command = [
+                self.aplay_path,
+                "-q",
+                wav_path,
+            ]
             subprocess.run(
                 command,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=max(10.0, len(text) / 8.0),
+                timeout=max(30.0, len(text) / 3.0),
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("text-to-speech playback timed out") from exc
         except subprocess.CalledProcessError as exc:
             error_output = exc.stderr.decode("utf-8", errors="ignore").strip()
             raise RuntimeError(error_output or "text-to-speech playback failed") from exc
+        except Exception as exc:
+            raise RuntimeError("Bark speech synthesis failed: {0}".format(exc)) from exc
+        finally:
+            if os.path.exists(wav_path):
+                os.remove(wav_path)
 
     def _build_image_prompt(self, dish_name, description):
         return (
