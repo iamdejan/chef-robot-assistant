@@ -431,7 +431,7 @@ class MediaNode(object):
             )
 
         rospy.loginfo("Loading Suno Bark text-to-speech model...")
-        self.bark_pipeline = pipeline("text-to-speech", "suno/bark")
+        self.bark_pipeline = pipeline("text-to-speech", "suno/bark-small")
         rospy.loginfo("Suno Bark model loaded.")
         return self.bark_pipeline
 
