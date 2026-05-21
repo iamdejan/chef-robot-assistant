@@ -40,7 +40,7 @@ Before setting up this repository, ensure the following requirements are met:
 
    ```bash
    cd ~/catkin_ws/src
-   git clone <repository-url>
+   git clone https://github.com/iamdejan/chef-robot-assistant.git chef_robot_assistant
    ```
 
 4. Install ROS dependencies:
@@ -53,18 +53,12 @@ Before setting up this repository, ensure the following requirements are met:
    rosdep install --from-paths src --ignore-src -r -y
    ```
 
-5. Install `uv` if you do not already have it:
+
+6. Install dependencies:
 
    ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-6. Create the Python environment and sync dependencies:
-
-   ```bash
-   cd ~/catkin_ws/src/WQF7010\ Robotics
-   uv sync
-   source .venv/bin/activate
+   cd ~/catkin_ws/src/chef_robot_assistant
+   pip3 install -r requirements.txt
    ```
 
 7. Create your local environment file from the template and fill in the required API keys:
@@ -74,9 +68,9 @@ Before setting up this repository, ensure the following requirements are met:
    ```
 
    Required keys:
-   - `ROBOFLOW_API_KEY`
    - `GEMINI_API_KEY`
    - `HF_TOKEN`
+   - `OPENAI_API_KEY`
 
 8. Build the package:
 
@@ -87,12 +81,11 @@ Before setting up this repository, ensure the following requirements are met:
 
 ### Running the System
 
-After setup:
-
+After setup, run these commands in sequence:
 ```bash
 cd ~/catkin_ws
 source devel/setup.bash
-source src/WQF7010\ Robotics/.venv/bin/activate
+cd ~
 roslaunch chef_robot_assistant foundation.launch
 ```
 
