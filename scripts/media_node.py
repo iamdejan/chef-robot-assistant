@@ -47,8 +47,8 @@ class MediaNode(object):
         self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.dotenv_path = os.path.join(self.repo_root, ".env")
 
-        self.tts_voice = str(self._param("tts_voice", "en")).strip() or "en"
-        self.tts_speed_wpm = int(self._param("tts_speed_wpm", 165))
+        self.tts_voice = str(self._param("tts_voice", "mb-us2+f1")).strip() or "mb-us2+f1"
+        self.tts_speed_wpm = int(self._param("tts_speed_wpm", 90))
         self.display_window_enabled = bool(
             self._param("display_window_enabled", True)
         )
@@ -75,7 +75,7 @@ class MediaNode(object):
         self.image_width = int(self._param("image_width", 1024))
         self.image_height = int(self._param("image_height", 1024))
 
-        self.espeak_path = shutil.which("espeak")
+        self.espeak_path = shutil.which("espeak-ng")
         self.current_recipe_data = None
         self.current_spoken_text = ""
         self.current_image = None
@@ -396,7 +396,7 @@ class MediaNode(object):
 
     def _speak_text(self, text):
         if not self.espeak_path:
-            raise RuntimeError("espeak is not available on this machine.")
+            raise RuntimeError("espeak-ng is not available on this machine.")
 
         command = [
             self.espeak_path,

@@ -27,8 +27,8 @@ chef_robot_assistant:
   recipe_retry_buffer_sec: 5.0
   default_cuisine: "malay"
   image_generation_enabled: true
-  tts_voice: "en"
-  tts_speed_wpm: 165
+  tts_voice: "mb-us2+f1"
+  tts_speed_wpm: 100
   display_window_enabled: true
   display_recipe_window_name: "Chef Robot Recipe"
   display_image_window_name: "Chef Robot Dish Image"

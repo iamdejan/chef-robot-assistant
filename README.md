@@ -21,13 +21,13 @@ Before setting up this repository, ensure the following requirements are met:
 
    ```bash
    sudo apt-get update
-   sudo apt-get install -y alsa-utils espeak
+   sudo apt-get install -y alsa-utils espeak-ng mbrola mbrola-en1 mbrola-us2
    ```
 
    For the speech branch, install `alsa-utils` so the `arecord` microphone capture
    command is available on Ubuntu.
    For the recipe branch, add `GEMINI_API_KEY` to your local `.env`.
-   For the output/image branch, install `espeak`, run inside an active desktop/X
+   For the output/image branch, install `espeak-ng`, run inside an active desktop/X
    session so OpenCV windows can open, and add `HF_TOKEN` to your local `.env`.
 
 2. Create a ROS workspace if you haven't already. The folder name is up to you, but the recommended name is `catkin_ws`, following the standard convention:
