@@ -11,3 +11,5 @@ Pillow
 python-dotenv
 requests
 tokenizers<0.21
+transformers==4.46.3
+spicy==0.16.0
