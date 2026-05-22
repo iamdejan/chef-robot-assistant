@@ -1,6 +1,6 @@
 string[] ingredients
 string cuisine
-feat/specify-dish
+string requested_dish
 ---
 bool success
 string dish_name
