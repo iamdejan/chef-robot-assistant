@@ -130,9 +130,17 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, requested_dish="", strict=False, missing_required=None): #bebe
+    def _build_prompt(self, ingredients, cuisine, health_preference, requested_dish="", strict=False, missing_required=None): #bebe
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
+        #bebe
+        health_lines = ""
+        if health_preference and health_preference != "no":
+            health_lines = (
+                "The user has specified a {0} requirement. Please adjust the recipe "
+                "ingredients and preparation to strictly reflect this preference.\n"
+            ).format(health_preference)
+
         strict_lines = ""
         if strict:
             strict_lines = (
@@ -155,6 +163,7 @@ class RecipeNode(object):
             "You are a practical cooking assistant for a home robot.\n"
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
+            "{health_lines}" 
             "{dish_lines}" #bebe
             "{strict_lines}"
             "Basic pantry items are allowed when needed.\n"
@@ -172,6 +181,7 @@ class RecipeNode(object):
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
         ).format(
+            health_lines=health_lines, #bebe
             dish_lines=dish_lines, #bebe
             strict_lines=strict_lines,
             ingredient_text=ingredient_text,
@@ -357,6 +367,7 @@ class RecipeNode(object):
             if normalized:
                 ingredients.append(normalized)
         cuisine = self._normalize_cuisine(request.cuisine)
+        health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower()) #bebe
         requested_dish = str(request.requested_dish).strip() #bebe
 
         if not ingredients:
@@ -392,6 +403,7 @@ class RecipeNode(object):
             prompt = self._build_prompt(
                 ingredients,
                 cuisine,
+                health_preference, #bebe
                 requested_dish=requested_dish,
                 strict=(attempt > 0),
                 missing_required=missing_required,
