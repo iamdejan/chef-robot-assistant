@@ -130,7 +130,7 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, strict=False, missing_required=None):
+    def _build_prompt(self, ingredients, cuisine, requested_dish="", strict=False, missing_required=None): #bebe
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
         strict_lines = ""
@@ -143,6 +143,13 @@ class RecipeNode(object):
                 strict_lines += "The previous response missed: {0}\n".format(
                     ", ".join(missing_required)
                 )
+        #bebe
+        dish_lines = ""
+        if requested_dish:
+            dish_lines = (
+                "The user specifically wants to make the dish: '{0}'.\n"
+                "You must tailor the recipe output specifically to create this dish while using the detected ingredients.\n"
+            ).format(requested_dish)
 
         return (
             "You are a practical cooking assistant for a home robot.\n"
@@ -348,6 +355,7 @@ class RecipeNode(object):
             if normalized:
                 ingredients.append(normalized)
         cuisine = self._normalize_cuisine(request.cuisine)
+        requested_dish = str(request.requested_dish).strip() #bebe
 
         if not ingredients:
             return GenerateRecipeResponse(
