@@ -391,7 +391,7 @@ class RecipeNode(object):
             prompt = self._build_prompt(
                 ingredients,
                 cuisine,
-                requested_dish=requested_dish, #bebe
+                requested_dish=requested_dish,
                 strict=(attempt > 0),
                 missing_required=missing_required,
             )
