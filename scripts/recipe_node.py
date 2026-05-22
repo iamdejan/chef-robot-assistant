@@ -155,6 +155,7 @@ class RecipeNode(object):
             "You are a practical cooking assistant for a home robot.\n"
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
+            "{dish_lines}" #bebe
             "{strict_lines}"
             "Basic pantry items are allowed when needed.\n"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
@@ -390,6 +391,7 @@ class RecipeNode(object):
             prompt = self._build_prompt(
                 ingredients,
                 cuisine,
+                requested_dish=requested_dish, #bebe
                 strict=(attempt > 0),
                 missing_required=missing_required,
             )
@@ -424,10 +426,11 @@ class RecipeNode(object):
             )
             if not missing_required:
                 rospy.loginfo(
-                    "Generated recipe '%s' for cuisine=%s ingredients=%s",
+                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish =%s",
                     parsed_recipe["dish_name"],
                     cuisine or "mixed",
                     ", ".join(ingredients),
+                    requested_dish or "none" #bebe
                 )
                 return GenerateRecipeResponse(
                     success=True,
