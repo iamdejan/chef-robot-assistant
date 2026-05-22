@@ -1,6 +1,7 @@
 string[] ingredients
 string cuisine
 string health_preference
+string requested_dish
 ---
 bool success
 string dish_name

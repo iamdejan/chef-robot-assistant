@@ -130,7 +130,7 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, health_preference, strict=False, missing_required=None): #bebe
+    def _build_prompt(self, ingredients, cuisine, health_preference, requested_dish="", strict=False, missing_required=None): #bebe
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
         #bebe
@@ -151,12 +151,20 @@ class RecipeNode(object):
                 strict_lines += "The previous response missed: {0}\n".format(
                     ", ".join(missing_required)
                 )
-#bebe
+        #bebe
+        dish_lines = ""
+        if requested_dish:
+            dish_lines = (
+                "The user specifically wants to make the dish: '{0}'.\n"
+                "You must tailor the recipe output specifically to create this dish while using the detected ingredients.\n"
+            ).format(requested_dish)
+
         return (
             "You are a practical cooking assistant for a home robot.\n"
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
             "{health_lines}" 
+            "{dish_lines}" #bebe
             "{strict_lines}"
             "Basic pantry items are allowed when needed.\n"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
@@ -174,6 +182,7 @@ class RecipeNode(object):
             "<short ingredient list and numbered cooking steps>"
         ).format(
             health_lines=health_lines, #bebe
+            dish_lines=dish_lines, #bebe
             strict_lines=strict_lines,
             ingredient_text=ingredient_text,
             cuisine_text=cuisine_text,
@@ -359,6 +368,7 @@ class RecipeNode(object):
                 ingredients.append(normalized)
         cuisine = self._normalize_cuisine(request.cuisine)
         health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower()) #bebe
+        requested_dish = str(request.requested_dish).strip() #bebe
 
         if not ingredients:
             return GenerateRecipeResponse(
@@ -394,6 +404,7 @@ class RecipeNode(object):
                 ingredients,
                 cuisine,
                 health_preference, #bebe
+                requested_dish=requested_dish,
                 strict=(attempt > 0),
                 missing_required=missing_required,
             )
@@ -428,10 +439,11 @@ class RecipeNode(object):
             )
             if not missing_required:
                 rospy.loginfo(
-                    "Generated recipe '%s' for cuisine=%s ingredients=%s",
+                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s", #bebe
                     parsed_recipe["dish_name"],
                     cuisine or "mixed",
                     ", ".join(ingredients),
+                    requested_dish or "none" #bebe
                 )
                 return GenerateRecipeResponse(
                     success=True,
