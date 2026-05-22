@@ -12,7 +12,11 @@ from chef_robot_assistant.srv import TranscribeSpeech
 
 
 NODE_NAME = "interaction_manager"
-VALID_CUISINES = ("malay", "western", "chinese")
+VALID_CUISINES = ("malay", "western", "chinese") 
+VALID_HEALTH_PREFS = ( #bebe
+    "low fat", "high fat", "low protein", "high protein", 
+    "low fiber", "high fiber", "low carbs", "high carbs"
+)
 YES_WORDS = ("yes", "yeah", "yep")
 NO_WORDS = ("no", "nope")
 
@@ -27,6 +31,7 @@ class InteractionManager(object):
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
         self.selected_cuisine = ""
+        self.health_preference = ""
         self.recipe_result = {}
         self.image_requested = False
 
@@ -287,6 +292,25 @@ class InteractionManager(object):
                 self._format_spoken_list(self.detected_ingredients)
             )
         )
+        # FEAT: Health Preference bebe
+        self._set_state("ASK_HEALTH_PREFERENCE")
+        self._say("Do you have any specific health preferences for this meal?")
+        
+        self._set_state("LISTEN_HEALTH_PREFERENCE")
+        health_transcript = self._capture_transcript()
+        if health_transcript is None:
+            self._handle_retry_exhausted_shutdown()
+            return
+            
+        self._set_state("VALIDATE_HEALTH_PREFERENCE")
+        self.health_preference = self._parse_health_preference(health_transcript)
+        
+        if self.health_preference in ("no", ""):
+            self.health_preference = ""
+            self._say("Alright, no specific health preferences.")
+        else:
+            self._say("Got it, I will make sure the recipe is {0}.".format(self.health_preference))
+
 
         self._set_state("ASK_CUISINE")
         self._say(
@@ -316,7 +340,8 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.selected_cuisine
+                self.selected_cuisine,
+                self.health_preference #bebe
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,
@@ -393,6 +418,20 @@ class InteractionManager(object):
 
         return None
 
+    #bebe
+    def _parse_health_preference(self, transcript):
+        if transcript is None:
+            return ""
+
+        for pref in VALID_HEALTH_PREFS:
+            if pref in transcript:
+                return pref
+        
+        if any(word in transcript for word in NO_WORDS):
+            return "no"
+            
+        return ""
+
     def _parse_cuisine(self, transcript):
         if transcript is None:
             return ""
@@ -433,6 +472,7 @@ class InteractionManager(object):
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
         self.selected_cuisine = ""
+        self.health_preference = ""
         self.recipe_result = {}
         self.image_requested = False
         self._clear_recipe_display_state()
