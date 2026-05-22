@@ -426,7 +426,7 @@ class RecipeNode(object):
             )
             if not missing_required:
                 rospy.loginfo(
-                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish =%s",
+                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s", #bebe
                     parsed_recipe["dish_name"],
                     cuisine or "mixed",
                     ", ".join(ingredients),
