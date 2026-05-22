@@ -381,14 +381,22 @@ class InteractionManager(object):
             return
 
         self._set_state("GENERATE_IMAGE")
+        #bebe
+        # Inject detected ingredients directly into the image prompt
+        image_prompt_description = "{0} It is made using: {1}.".format(
+            self.recipe_result["spoken_summary"],
+            ", ".join(self.detected_ingredients)
+        )
+        
         image_response = self._retry_service_call(
             "Image generation",
             lambda: self.generate_dish_image(
                 self.recipe_result["dish_name"],
-                self.recipe_result["spoken_summary"]
+                image_prompt_description
             ),
             "Image generation failed. I will try again."
         )
+
         if not image_response.success:
             self._handle_retry_exhausted_shutdown()
             return

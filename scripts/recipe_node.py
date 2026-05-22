@@ -172,6 +172,7 @@ class RecipeNode(object):
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
         ).format(
+            dish_lines=dish_lines, #bebe
             strict_lines=strict_lines,
             ingredient_text=ingredient_text,
             cuisine_text=cuisine_text,
