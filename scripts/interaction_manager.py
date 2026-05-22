@@ -26,6 +26,7 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
+        self.requested_dish = "" #bebe
         self.selected_cuisine = ""
         self.recipe_result = {}
         self.image_requested = False
@@ -288,6 +289,23 @@ class InteractionManager(object):
             )
         )
 
+        #bebe, Ask for a specific dish
+        self._set_state("ASK_SPECIFIC_DISH")
+        self._say("Do you have a specific dish in mind?")
+
+        self._set_state("LISTEN_SPECIFIC_DISH")
+        dish_transcript = self._capture_transcript()
+        if dish_transcript is None:
+            self._handle_retry_exhausted_shutdown()
+            return
+
+        self._set_state("VALIDATE_SPECIFIC_DISH")
+        if any(word in dish_transcript for word in NO_WORDS):
+            self.requested_dish = ""
+        else:
+            self.requested_dish = dish_transcript
+
+
         self._set_state("ASK_CUISINE")
         self._say(
             "I am generating a recipe for you. "
@@ -316,7 +334,8 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.selected_cuisine
+                self.selected_cuisine,
+                self.requested_dish
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,
@@ -362,14 +381,22 @@ class InteractionManager(object):
             return
 
         self._set_state("GENERATE_IMAGE")
+        #bebe
+        # Inject detected ingredients directly into the image prompt
+        image_prompt_description = "{0} It is made using: {1}.".format(
+            self.recipe_result["spoken_summary"],
+            ", ".join(self.detected_ingredients)
+        )
+        
         image_response = self._retry_service_call(
             "Image generation",
             lambda: self.generate_dish_image(
                 self.recipe_result["dish_name"],
-                self.recipe_result["spoken_summary"]
+                image_prompt_description
             ),
             "Image generation failed. I will try again."
         )
+
         if not image_response.success:
             self._handle_retry_exhausted_shutdown()
             return
@@ -432,6 +459,7 @@ class InteractionManager(object):
         self.retry_count = 0
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
+        self.requested_dish = "" #bebe
         self.selected_cuisine = ""
         self.recipe_result = {}
         self.image_requested = False
