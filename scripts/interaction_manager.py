@@ -13,7 +13,7 @@ from chef_robot_assistant.srv import TranscribeSpeech
 
 NODE_NAME = "interaction_manager"
 VALID_CUISINES = ("malay", "western", "chinese") 
-VALID_HEALTH_PREFS = ( #bebe
+VALID_HEALTH_PREFS = ( 
     "low fat", "high fat", "low protein", "high protein", 
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
@@ -30,7 +30,7 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
-        self.requested_dish = "" #bebe
+        self.requested_dish = ""
         self.selected_cuisine = ""
         self.health_preference = ""
         self.recipe_result = {}
@@ -359,7 +359,7 @@ class InteractionManager(object):
             lambda: self.generate_recipe(
                 self.detected_ingredients,
                 self.selected_cuisine,
-                self.health_preference, #bebe
+                self.health_preference,
                 self.requested_dish
             ),
             "Recipe generation failed. I will try again.",
