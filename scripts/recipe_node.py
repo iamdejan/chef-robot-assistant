@@ -130,10 +130,20 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, health_preference, requested_dish="", strict=False, missing_required=None): #bebe
+    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", strict=False, missing_required=None, only_use_detected=False): #bebe
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
         #bebe
+        restriction_lines = ""
+        if only_use_detected:
+            restriction_lines = (
+                "CRITICAL INSTRUCTION: You MUST generate a recipe using ONLY the detected ingredients.\n"
+                "Do NOT add any extra ingredients. Basic pantry items are NOT allowed unless they are in the detected list.\n"
+                "The 'Missing Ingredients' section MUST strictly say 'none'.\n"
+            )
+        else:
+            restriction_lines = "Basic pantry items are allowed when needed.\n"
+
         health_lines = ""
         if health_preference and health_preference != "no":
             health_lines = (
@@ -166,7 +176,7 @@ class RecipeNode(object):
             "{health_lines}" 
             "{dish_lines}" #bebe
             "{strict_lines}"
-            "Basic pantry items are allowed when needed.\n"
+            "{restriction_lines}"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
             "If no extra ingredients are needed, write 'none'.\n"
             "Keep the spoken summary short enough to be read aloud naturally.\n"
@@ -176,13 +186,14 @@ class RecipeNode(object):
             "Return exactly these labeled sections:\n"
             "Dish Name: <short dish name>\n"
             "Spoken Summary: <1-2 sentence summary>\n"
-            "Missing Ingredients:\n"
+            "Missing Ingredients:\n"F
             "- <one item per line or 'none'>\n"
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
         ).format(
             health_lines=health_lines, #bebe
             dish_lines=dish_lines, #bebe
+            restriction_lines=restriction_lines,
             strict_lines=strict_lines,
             ingredient_text=ingredient_text,
             cuisine_text=cuisine_text,
@@ -367,6 +378,7 @@ class RecipeNode(object):
             if normalized:
                 ingredients.append(normalized)
         cuisine = self._normalize_cuisine(request.cuisine)
+        strict_ingredients = request.strict_ingredients
         health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower()) #bebe
         requested_dish = str(request.requested_dish).strip() #bebe
 
@@ -407,6 +419,7 @@ class RecipeNode(object):
                 requested_dish=requested_dish,
                 strict=(attempt > 0),
                 missing_required=missing_required,
+                only_use_detected=strict_ingredients
             )
             raw_text, recipe_error = self._call_gemini_api(api_key, prompt)
             if recipe_error:

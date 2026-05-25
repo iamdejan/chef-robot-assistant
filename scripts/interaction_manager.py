@@ -375,6 +375,7 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
+                self.strict_ingredients,
                 self.selected_cuisine,
                 self.health_preference,
                 self.requested_dish
@@ -515,6 +516,7 @@ class InteractionManager(object):
         self.retry_count = 0
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
+        self.strict_ingredients = False
         self.requested_dish = "" #bebe
         self.selected_cuisine = ""
         self.health_preference = ""
