@@ -375,10 +375,10 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.strict_ingredients,
-                self.selected_cuisine,
-                self.health_preference,
-                self.requested_dish
+                self.selected_cuisine,      
+                self.requested_dish,      
+                self.health_preference,   
+                self.strict_ingredients    
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,

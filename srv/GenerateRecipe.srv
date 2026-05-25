@@ -1,8 +1,8 @@
 string[] ingredients
 string cuisine
-bool strict_ingredients
-string health_preference
 string requested_dish
+string health_preference
+bool strict_ingredients
 ---
 bool success
 string dish_name

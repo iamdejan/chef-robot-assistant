@@ -186,7 +186,7 @@ class RecipeNode(object):
             "Return exactly these labeled sections:\n"
             "Dish Name: <short dish name>\n"
             "Spoken Summary: <1-2 sentence summary>\n"
-            "Missing Ingredients:\n"F
+            "Missing Ingredients:\n"
             "- <one item per line or 'none'>\n"
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
@@ -415,8 +415,8 @@ class RecipeNode(object):
             prompt = self._build_prompt(
                 ingredients,
                 cuisine,
-                health_preference, #bebe
                 requested_dish=requested_dish,
+                health_preference=health_preference,
                 strict=(attempt > 0),
                 missing_required=missing_required,
                 only_use_detected=strict_ingredients
