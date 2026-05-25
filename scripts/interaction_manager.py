@@ -13,7 +13,7 @@ from chef_robot_assistant.srv import TranscribeSpeech
 
 NODE_NAME = "interaction_manager"
 VALID_CUISINES = ("malay", "western", "chinese") 
-VALID_HEALTH_PREFS = ( #bebe
+VALID_HEALTH_PREFS = ( 
     "low fat", "high fat", "low protein", "high protein", 
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
@@ -30,7 +30,8 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
-        self.requested_dish = "" #bebe
+        self.strict_ingredients = False #bebe
+        self.requested_dish = ""
         self.selected_cuisine = ""
         self.health_preference = ""
         self.recipe_result = {}
@@ -293,6 +294,22 @@ class InteractionManager(object):
                 self._format_spoken_list(self.detected_ingredients)
             )
         )
+
+        #bebe, ask if they can buy missing ingredients
+        self._set_state("ASK_BUY_OPTION")
+        self._say("Are you able to buy missing ingredients?")
+
+        self._set_state("LISTEN_BUY_OPTION")
+        buy_transcript = self._capture_transcript()
+        if buy_transcript is None:
+            self._handle_retry_exhausted_shutdown()
+            return
+
+        self._set_state("VALIDATE_BUY_OPTION")
+        can_buy = self._parse_yes_no(buy_transcript)
+        # If they CANNOT buy ingredients, we must strictly use only what is detected.
+        self.strict_ingredients = not can_buy
+
         # FEAT: Health Preference bebe
         self._set_state("ASK_HEALTH_PREFERENCE")
         self._say("Do you have any specific health preferences for this meal?")
@@ -358,9 +375,10 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.selected_cuisine,
-                self.health_preference, #bebe
-                self.requested_dish
+                self.selected_cuisine,      
+                self.requested_dish,      
+                self.health_preference,   
+                self.strict_ingredients    
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,
@@ -498,6 +516,7 @@ class InteractionManager(object):
         self.retry_count = 0
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
+        self.strict_ingredients = False
         self.requested_dish = "" #bebe
         self.selected_cuisine = ""
         self.health_preference = ""
