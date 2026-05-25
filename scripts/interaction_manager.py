@@ -30,6 +30,7 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
+        self.strict_ingredients = False #bebe
         self.requested_dish = ""
         self.selected_cuisine = ""
         self.health_preference = ""
