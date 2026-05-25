@@ -294,6 +294,22 @@ class InteractionManager(object):
                 self._format_spoken_list(self.detected_ingredients)
             )
         )
+
+        #bebe, ask if they can buy missing ingredients
+        self._set_state("ASK_BUY_OPTION")
+        self._say("Are you able to buy missing ingredients?")
+
+        self._set_state("LISTEN_BUY_OPTION")
+        buy_transcript = self._capture_transcript()
+        if buy_transcript is None:
+            self._handle_retry_exhausted_shutdown()
+            return
+
+        self._set_state("VALIDATE_BUY_OPTION")
+        can_buy = self._parse_yes_no(buy_transcript)
+        # If they CANNOT buy ingredients, we must strictly use only what is detected.
+        self.strict_ingredients = not can_buy
+
         # FEAT: Health Preference bebe
         self._set_state("ASK_HEALTH_PREFERENCE")
         self._say("Do you have any specific health preferences for this meal?")
