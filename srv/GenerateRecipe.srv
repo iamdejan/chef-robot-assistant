@@ -1,5 +1,6 @@
 string[] ingredients
 string cuisine
+bool strict_ingredients
 string health_preference
 string requested_dish
 ---
