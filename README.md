@@ -20,15 +20,11 @@ Before setting up this repository, ensure the following requirements are met:
 1. Install the required Ubuntu packages:
 
    ```bash
-   sudo apt-get update
-   sudo apt-get install -y alsa-utils espeak
+   sudo apt update
+   sudo apt install -y alsa-utils espeak ros-noetic-usb-cam
    ```
 
-   For the speech branch, install `alsa-utils` so the `arecord` microphone capture
-   command is available on Ubuntu.
-   For the recipe branch, add `GEMINI_API_KEY` to your local `.env`.
-   For the output/image branch, install `espeak`, run inside an active desktop/X
-   session so OpenCV windows can open, and add `HF_TOKEN` to your local `.env`.
+   `alsa-utils` is required so the `arecord` microphone capture command is available on Ubuntu.
 
 2. Create a ROS workspace if you haven't already. The folder name is up to you, but the recommended name is `catkin_ws`, following the standard convention:
 
@@ -43,7 +39,7 @@ Before setting up this repository, ensure the following requirements are met:
    git clone https://github.com/iamdejan/chef-robot-assistant.git chef_robot_assistant
    ```
 
-4. Install ROS dependencies:
+4. Install ROS dependencies, but only if ROS has never been installed before:
 
    ```bash
    cd ~/catkin_ws
@@ -52,6 +48,8 @@ Before setting up this repository, ensure the following requirements are met:
    rosdep update --include-eol-distros # only run once after installing ROS.
    rosdep install --from-paths src --ignore-src -r -y
    ```
+
+   If in doubt, do not initialize `rosdep`.
 
 
 6. Install dependencies:
@@ -72,6 +70,8 @@ Before setting up this repository, ensure the following requirements are met:
    - `HF_TOKEN`
    - `OPENAI_API_KEY`
 
+   In the Juno robot, we already put the API keys which can be used for this project. Note that the API keys will be invalidated when Semester 2 ends.
+
 8. Build the package:
 
    ```bash
@@ -83,9 +83,17 @@ Before setting up this repository, ensure the following requirements are met:
 
 After setup, run these commands in sequence:
 ```bash
-cd ~/catkin_ws
-source devel/setup.bash
 cd ~
+source /opt/ros/noetic/setup.bash
+source $HOME/catkin_ws/devel/setup.bash
+```
+
+Then, run either:
+```bash
+roslaunch chef_robot_assistant foundation_with_usb_cam.launch
+```
+or
+```bash
 roslaunch chef_robot_assistant foundation.launch
 ```
 
