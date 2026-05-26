@@ -127,7 +127,7 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-90" value="" style="group" parent="1" connectable="0" vertex="1">
-                    <mxGeometry x="606" y="889.99" width="220" height="90" as="geometry"/>
+                    <mxGeometry x="589" y="886" width="220" height="90" as="geometry"/>
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-91" value="Gemini 3.1 Flash Lite" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="7EEjdGi1n8ksyK5lMeqK-90" vertex="1">
                     <mxGeometry width="220" height="70" as="geometry"/>
@@ -164,10 +164,10 @@
                     <mxGeometry x="366" y="742" width="118" height="46" as="geometry"/>
                 </mxCell>
                 <mxCell id="8" value="&lt;b&gt;recipe_node&lt;/b&gt;&lt;div&gt;(ROS Node)&lt;/div&gt;&lt;div&gt;(Recipe handling)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=top;spacing=1;fontFamily=Helvetica;fontSize=12;fontColor=default;fillColor=none;gradientColor=none;" vertex="1" parent="1">
-                    <mxGeometry x="658" y="570" width="170" height="178" as="geometry"/>
+                    <mxGeometry x="641" y="570" width="170" height="178" as="geometry"/>
                 </mxCell>
                 <mxCell id="15" value="" style="group" vertex="1" connectable="0" parent="1">
-                    <mxGeometry x="684.005" y="652" width="126.85000000000002" height="90" as="geometry"/>
+                    <mxGeometry x="667.005" y="652" width="126.85000000000002" height="90" as="geometry"/>
                 </mxCell>
                 <mxCell id="11" value="" style="group" connectable="0" vertex="1" parent="15">
                     <mxGeometry x="1.5749999999999318" width="123.69999999999999" height="90" as="geometry"/>
