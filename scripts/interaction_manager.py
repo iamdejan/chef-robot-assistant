@@ -12,9 +12,9 @@ from chef_robot_assistant.srv import TranscribeSpeech
 
 
 NODE_NAME = "interaction_manager"
-VALID_CUISINES = ("malay", "western", "chinese") 
-VALID_HEALTH_PREFS = ( 
-    "low fat", "high fat", "low protein", "high protein", 
+VALID_CUISINES = ("malay", "western", "chinese")
+VALID_HEALTH_PREFS = (
+    "low fat", "high fat", "low protein", "high protein",
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
 YES_WORDS = ("yes", "yeah", "yep")
@@ -37,11 +37,7 @@ class InteractionManager(object):
         self.recipe_result = {}
         self.image_requested = False
 
-        self.camera_topic = self._param("camera_topic", "/camera/image_raw")
-        self.camera_frame_topic_out = self._param(
-            "camera_frame_topic_out",
-            "/chef_robot_assistant/image_raw"
-        )
+        self.camera_topic = self._param("camera_topic", "/usb_cam/image_raw")
         self.detection_confidence_threshold = self._param(
             "detection_confidence_threshold",
             0.5
@@ -313,16 +309,16 @@ class InteractionManager(object):
         # FEAT: Health Preference bebe
         self._set_state("ASK_HEALTH_PREFERENCE")
         self._say("Do you have any specific health preferences for this meal?")
-        
+
         self._set_state("LISTEN_HEALTH_PREFERENCE")
         health_transcript = self._capture_transcript()
         if health_transcript is None:
             self._handle_retry_exhausted_shutdown()
             return
-            
+
         self._set_state("VALIDATE_HEALTH_PREFERENCE")
         self.health_preference = self._parse_health_preference(health_transcript)
-        
+
         if self.health_preference in ("no", ""):
             self.health_preference = ""
             self._say("Alright, no specific health preferences.")
@@ -375,10 +371,10 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.selected_cuisine,      
-                self.requested_dish,      
-                self.health_preference,   
-                self.strict_ingredients    
+                self.selected_cuisine,
+                self.requested_dish,
+                self.health_preference,
+                self.strict_ingredients
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,
@@ -430,7 +426,7 @@ class InteractionManager(object):
             self.recipe_result["spoken_summary"],
             ", ".join(self.detected_ingredients)
         )
-        
+
         image_response = self._retry_service_call(
             "Image generation",
             lambda: self.generate_dish_image(
@@ -471,10 +467,10 @@ class InteractionManager(object):
         for pref in VALID_HEALTH_PREFS:
             if pref in transcript:
                 return pref
-        
+
         if any(word in transcript for word in NO_WORDS):
             return "no"
-            
+
         return ""
 
     def _parse_cuisine(self, transcript):
