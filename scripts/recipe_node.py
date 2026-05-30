@@ -130,10 +130,9 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", strict=False, missing_required=None, only_use_detected=False): #bebe
+    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", allergies="", strict=False, missing_required=None, only_use_detected=False): 
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
-        #bebe
         restriction_lines = ""
         if only_use_detected:
             restriction_lines = (
@@ -151,6 +150,13 @@ class RecipeNode(object):
                 "ingredients and preparation to strictly reflect this preference.\n"
             ).format(health_preference)
 
+        allergy_lines = ""
+        if allergies and allergies.lower() != "no":
+            allergy_lines = (
+                "CRITICAL FATAL WARNING: The user has the following allergies: '{0}'.\n"
+                "You MUST NOT include these ingredients, nor any derivatives of them, anywhere in the recipe.\n"
+            ).format(allergies)
+
         strict_lines = ""
         if strict:
             strict_lines = (
@@ -161,7 +167,7 @@ class RecipeNode(object):
                 strict_lines += "The previous response missed: {0}\n".format(
                     ", ".join(missing_required)
                 )
-        #bebe
+        
         dish_lines = ""
         if requested_dish:
             dish_lines = (
@@ -174,7 +180,8 @@ class RecipeNode(object):
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
             "{health_lines}" 
-            "{dish_lines}" #bebe
+            "{allergy_lines}"
+            "{dish_lines}" 
             "{strict_lines}"
             "{restriction_lines}"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
@@ -191,8 +198,9 @@ class RecipeNode(object):
             "Full Recipe:\n"
             "<short ingredient list and numbered cooking steps>"
         ).format(
-            health_lines=health_lines, #bebe
-            dish_lines=dish_lines, #bebe
+            health_lines=health_lines,
+            allergy_lines=allergy_lines,
+            dish_lines=dish_lines,
             restriction_lines=restriction_lines,
             strict_lines=strict_lines,
             ingredient_text=ingredient_text,
@@ -378,10 +386,11 @@ class RecipeNode(object):
             if normalized:
                 ingredients.append(normalized)
         cuisine = self._normalize_cuisine(request.cuisine)
+        requested_dish = str(request.requested_dish).strip()
+        health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower())
+        allergies = str(request.allergies).strip()
         strict_ingredients = request.strict_ingredients
-        health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower()) #bebe
-        requested_dish = str(request.requested_dish).strip() #bebe
-
+        
         if not ingredients:
             return GenerateRecipeResponse(
                 success=False,
@@ -417,6 +426,7 @@ class RecipeNode(object):
                 cuisine,
                 requested_dish=requested_dish,
                 health_preference=health_preference,
+                allergies=allergies,
                 strict=(attempt > 0),
                 missing_required=missing_required,
                 only_use_detected=strict_ingredients
@@ -452,11 +462,11 @@ class RecipeNode(object):
             )
             if not missing_required:
                 rospy.loginfo(
-                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s", #bebe
+                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s", 
                     parsed_recipe["dish_name"],
                     cuisine or "mixed",
                     ", ".join(ingredients),
-                    requested_dish or "none" #bebe
+                    requested_dish or "none" 
                 )
                 return GenerateRecipeResponse(
                     success=True,

@@ -2,6 +2,7 @@ string[] ingredients
 string cuisine
 string requested_dish
 string health_preference
+string allergies
 bool strict_ingredients
 ---
 bool success
