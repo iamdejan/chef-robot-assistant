@@ -312,7 +312,7 @@ class InteractionManager(object):
 
         # FEAT: Health Preference bebe
         self._set_state("ASK_HEALTH_PREFERENCE")
-        self._say("Do you have any specific health preferences for this meal?")
+        self._say("Do you have health preferences, such as low fat, high protein, or low carbs?")
         
         self._set_state("LISTEN_HEALTH_PREFERENCE")
         health_transcript = self._capture_transcript()
