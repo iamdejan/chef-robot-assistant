@@ -331,7 +331,7 @@ class InteractionManager(object):
             self._say("Got it, I will make sure the recipe is {0}.".format(self.health_preference))
          #Clarify allergies
         self._set_state("ASK_ALLERGIES")
-        self._say("Do you have any food allergies? Say no to skip.")
+        self._say("Do you have any food allergies?")
 
         self._set_state("LISTEN_ALLERGIES")
         allergy_transcript = self._capture_transcript()
