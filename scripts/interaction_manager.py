@@ -329,7 +329,7 @@ class InteractionManager(object):
             self._say("Alright, no specific health preferences.")
         else:
             self._say("Got it, I will make sure the recipe is {0}.".format(self.health_preference))
-         #Clarify allergies
+        #Clarify allergies
         self._set_state("ASK_ALLERGIES")
         self._say("Do you have any food allergies?")
 
