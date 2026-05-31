@@ -30,10 +30,11 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
-        self.strict_ingredients = False #bebe
+        self.strict_ingredients = False 
         self.requested_dish = ""
         self.selected_cuisine = ""
         self.health_preference = ""
+        self.allergies = ""
         self.recipe_result = {}
         self.image_requested = False
 
@@ -295,7 +296,7 @@ class InteractionManager(object):
             )
         )
 
-        #bebe, ask if they can buy missing ingredients
+        #Ask if they can buy missing ingredients
         self._set_state("ASK_BUY_OPTION")
         self._say("Are you able to buy missing ingredients?")
 
@@ -310,7 +311,7 @@ class InteractionManager(object):
         # If they CANNOT buy ingredients, we must strictly use only what is detected.
         self.strict_ingredients = not can_buy
 
-        # FEAT: Health Preference bebe
+        # FEAT: Health Preference
         self._set_state("ASK_HEALTH_PREFERENCE")
         self._say("Do you have health preferences, such as low fat, high protein, or low carbs?")
         
@@ -328,9 +329,24 @@ class InteractionManager(object):
             self._say("Alright, no specific health preferences.")
         else:
             self._say("Got it, I will make sure the recipe is {0}.".format(self.health_preference))
+        #Clarify allergies
+        self._set_state("ASK_ALLERGIES")
+        self._say("Do you have any food allergies?")
 
+        self._set_state("LISTEN_ALLERGIES")
+        allergy_transcript = self._capture_transcript()
+        if allergy_transcript is None:
+            self._handle_retry_exhausted_shutdown()
+            return
 
-        #bebe, Ask for a specific dish
+        self._set_state("VALIDATE_ALLERGIES")
+        if any(word in allergy_transcript for word in NO_WORDS):
+            self.allergies = ""
+        else:
+            self.allergies = allergy_transcript
+            self._say("Got it, I will avoid {0}.".format(self.allergies))
+
+        #Ask for a specific dish
         self._set_state("ASK_SPECIFIC_DISH")
         self._say("Do you have a specific dish in mind?")
 
@@ -377,7 +393,8 @@ class InteractionManager(object):
                 self.detected_ingredients,
                 self.selected_cuisine,      
                 self.requested_dish,      
-                self.health_preference,   
+                self.health_preference,
+                self.allergies,   
                 self.strict_ingredients    
             ),
             "Recipe generation failed. I will try again.",
@@ -424,7 +441,6 @@ class InteractionManager(object):
             return
 
         self._set_state("GENERATE_IMAGE")
-        #bebe
         # Inject detected ingredients directly into the image prompt
         image_prompt_description = "{0} It is made using: {1}.".format(
             self.recipe_result["spoken_summary"],
@@ -463,7 +479,6 @@ class InteractionManager(object):
 
         return None
 
-    #bebe
     def _parse_health_preference(self, transcript):
         if transcript is None:
             return ""
@@ -517,9 +532,10 @@ class InteractionManager(object):
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
         self.strict_ingredients = False
-        self.requested_dish = "" #bebe
+        self.requested_dish = "" 
         self.selected_cuisine = ""
         self.health_preference = ""
+        self.allergies = "" 
         self.recipe_result = {}
         self.image_requested = False
         self._clear_recipe_display_state()
