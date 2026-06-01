@@ -548,7 +548,6 @@ class RecipeNode(object):
         -------
         ValidateDishNameResponse
             Fields:
-
             - ``is_valid`` (bool): True if Gemini confirms the dish is valid,
               False otherwise.
             - ``success`` (bool): True if the API call completed without error.
