@@ -18,7 +18,7 @@ VALID_HEALTH_PREFS = (
     "low fat", "high fat", "low protein", "high protein",
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
-YES_WORDS = ("yes", "yeah", "yep")
+YES_WORDS = ("yes", "yeah", "yep", "ya")
 NO_WORDS = ("no", "nope")
 
 
