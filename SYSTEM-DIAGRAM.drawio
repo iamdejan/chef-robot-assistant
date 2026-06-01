@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram name="Page-1" id="69RcK34-0LglUzhph4Pl">
-        <mxGraphModel dx="816" dy="607" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#ffffff" math="0" shadow="0">
+        <mxGraphModel dx="843" dy="607" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#ffffff" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -28,12 +28,6 @@
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-7" value="User" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="7EEjdGi1n8ksyK5lMeqK-18" vertex="1">
                     <mxGeometry x="5" y="60" width="30" height="20" as="geometry"/>
-                </mxCell>
-                <mxCell id="7EEjdGi1n8ksyK5lMeqK-27" value="" style="group" parent="1" connectable="0" vertex="1">
-                    <mxGeometry x="411.5" y="812" width="123.69999999999999" height="90" as="geometry"/>
-                </mxCell>
-                <mxCell id="7EEjdGi1n8ksyK5lMeqK-24" value="" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="7EEjdGi1n8ksyK5lMeqK-27" vertex="1">
-                    <mxGeometry x="40.54999999999998" width="42.599999999999994" height="54" as="geometry"/>
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-32" value="" style="group" parent="1" connectable="0" vertex="1">
                     <mxGeometry x="208.35000000000002" y="822" width="90" height="94" as="geometry"/>
@@ -72,9 +66,6 @@
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-45" value="Text-to-speech" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="148" y="954" width="90" height="15" as="geometry"/>
-                </mxCell>
-                <mxCell id="7EEjdGi1n8ksyK5lMeqK-50" value="&lt;b&gt;generate_dish_image&lt;/b&gt;&lt;br&gt;&lt;div&gt;(ROS Service)&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Helvetica;fontSize=12;fontColor=default;" parent="1" vertex="1">
-                    <mxGeometry x="401.5" y="872" width="126.85" height="30" as="geometry"/>
                 </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-59" value="" style="group" parent="1" connectable="0" vertex="1">
                     <mxGeometry x="465" y="108" width="110" height="84" as="geometry"/>
@@ -132,9 +123,6 @@
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-91" value="Gemini 3.1 Flash Lite" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" parent="7EEjdGi1n8ksyK5lMeqK-90" vertex="1">
                     <mxGeometry width="220" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="7EEjdGi1n8ksyK5lMeqK-92" value="Recipe (text) generator" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="7EEjdGi1n8ksyK5lMeqK-90" vertex="1">
-                    <mxGeometry x="50" y="70" width="129" height="20" as="geometry"/>
-                </mxCell>
                 <mxCell id="7EEjdGi1n8ksyK5lMeqK-98" value="" style="edgeStyle=none;orthogonalLoop=1;jettySize=auto;html=1;rounded=0;entryX=0.625;entryY=0.2;entryDx=0;entryDy=0;entryPerimeter=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="13" target="7EEjdGi1n8ksyK5lMeqK-91" edge="1">
                     <mxGeometry width="80" relative="1" as="geometry">
                         <Array as="points"/>
@@ -161,33 +149,21 @@
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="7" value="Generate image if user wishes to do so" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="366" y="742" width="118" height="46" as="geometry"/>
+                    <mxGeometry x="347.5" y="739" width="118" height="46" as="geometry"/>
                 </mxCell>
                 <mxCell id="8" value="&lt;b&gt;recipe_node&lt;/b&gt;&lt;div&gt;(ROS Node)&lt;/div&gt;&lt;div&gt;(Recipe handling)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=top;spacing=1;fontFamily=Helvetica;fontSize=12;fontColor=default;fillColor=none;gradientColor=none;" parent="1" vertex="1">
-                    <mxGeometry x="641" y="570" width="170" height="178" as="geometry"/>
+                    <mxGeometry x="534" y="570" width="306" height="178" as="geometry"/>
                 </mxCell>
-                <mxCell id="15" value="" style="group" parent="1" vertex="1" connectable="0">
-                    <mxGeometry x="667.005" y="652" width="126.85000000000002" height="90" as="geometry"/>
-                </mxCell>
-                <mxCell id="11" value="" style="group" parent="15" connectable="0" vertex="1">
-                    <mxGeometry x="1.5749999999999318" width="123.69999999999999" height="90" as="geometry"/>
-                </mxCell>
-                <mxCell id="12" value="" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="11" vertex="1">
-                    <mxGeometry x="40.54999999999998" width="42.599999999999994" height="54" as="geometry"/>
-                </mxCell>
-                <mxCell id="13" value="&lt;b&gt;generate_recipe&lt;/b&gt;&lt;br&gt;&lt;div&gt;(ROS Service)&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Helvetica;fontSize=12;fontColor=default;" parent="15" vertex="1">
-                    <mxGeometry y="55" width="126.85" height="30" as="geometry"/>
-                </mxCell>
-                <mxCell id="16" style="edgeStyle=none;html=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.125;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="7EEjdGi1n8ksyK5lMeqK-38" target="13" edge="1">
+                <mxCell id="16" style="edgeStyle=none;html=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=-0.003;entryY=0.031;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="7EEjdGi1n8ksyK5lMeqK-38" target="12" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <mxPoint x="826" y="418" as="sourcePoint"/>
                         <mxPoint x="743" y="572" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
                 <mxCell id="17" value="Generate recipe based on user&#39;s inputs" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
-                    <mxGeometry x="598" y="493" width="134" height="46" as="geometry"/>
+                    <mxGeometry x="661.84" y="521" width="134" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="34" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.74;entryY=0.008;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="22" edge="1" target="30">
+                <mxCell id="34" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.74;entryY=0.008;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="22" target="30" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <mxPoint x="237" y="369.51036071777344" as="targetPoint"/>
                     </mxGeometry>
@@ -246,6 +222,64 @@
                 </mxCell>
                 <mxCell id="41" value="Stream voice&lt;div&gt;for transcribing&lt;/div&gt;&lt;div&gt;process&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="321.5" y="95" width="90" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="43" value="" style="group" vertex="1" connectable="0" parent="1">
+                    <mxGeometry x="534.995" y="635" width="126.85000000000002" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="44" value="" style="group" connectable="0" vertex="1" parent="43">
+                    <mxGeometry x="1.5749999999999318" width="123.69999999999999" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="45" value="" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" vertex="1" parent="44">
+                    <mxGeometry x="40.54999999999998" width="42.599999999999994" height="54" as="geometry"/>
+                </mxCell>
+                <mxCell id="46" value="&lt;b&gt;validate_dish_name&lt;/b&gt;&lt;br&gt;&lt;div&gt;(ROS Service)&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Helvetica;fontSize=12;fontColor=default;" vertex="1" parent="43">
+                    <mxGeometry y="55" width="126.85" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="47" style="edgeStyle=none;html=1;exitX=0.621;exitY=0.978;exitDx=0;exitDy=0;entryX=0.224;entryY=-0.006;entryDx=0;entryDy=0;entryPerimeter=0;exitPerimeter=0;" edge="1" parent="1" source="7EEjdGi1n8ksyK5lMeqK-38" target="45">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="563" y="440" as="sourcePoint"/>
+                        <mxPoint x="734" y="645" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="48" value="Validate whether&lt;div&gt;customer&#39;s specified dish&lt;/div&gt;&lt;div&gt;is a valid name or not.&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="497" y="524" width="155" height="46" as="geometry"/>
+                </mxCell>
+                <mxCell id="49" value="" style="group" vertex="1" connectable="0" parent="1">
+                    <mxGeometry x="392" y="817" width="126.85000000000002" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="7EEjdGi1n8ksyK5lMeqK-27" value="" style="group" parent="49" connectable="0" vertex="1">
+                    <mxGeometry width="123.69999999999999" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="7EEjdGi1n8ksyK5lMeqK-24" value="" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="7EEjdGi1n8ksyK5lMeqK-27" vertex="1">
+                    <mxGeometry x="40.54999999999998" width="42.599999999999994" height="54" as="geometry"/>
+                </mxCell>
+                <mxCell id="7EEjdGi1n8ksyK5lMeqK-50" value="&lt;b&gt;generate_dish_image&lt;/b&gt;&lt;br&gt;&lt;div&gt;(ROS Service)&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Helvetica;fontSize=12;fontColor=default;" parent="49" vertex="1">
+                    <mxGeometry y="60" width="126.85" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="50" value="" style="edgeStyle=none;orthogonalLoop=1;jettySize=auto;html=1;rounded=0;entryX=0.314;entryY=0.133;entryDx=0;entryDy=0;entryPerimeter=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" target="7EEjdGi1n8ksyK5lMeqK-91">
+                    <mxGeometry width="80" relative="1" as="geometry">
+                        <Array as="points"/>
+                        <mxPoint x="602" y="726" as="sourcePoint"/>
+                        <mxPoint x="570" y="905" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="52" value="Generate recipe" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="740" y="834" width="99.14" height="21" as="geometry"/>
+                </mxCell>
+                <mxCell id="53" value="Validate&lt;div&gt;recipe&#39;s name&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="620" y="769" width="88.07" height="32" as="geometry"/>
+                </mxCell>
+                <mxCell id="56" value="" style="group" vertex="1" connectable="0" parent="1">
+                    <mxGeometry x="726.9953713046907" y="635" width="107.4189199842333" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="" style="group" parent="56" connectable="0" vertex="1">
+                    <mxGeometry x="2.2518553409538526" width="102.91520930232556" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="" style="image;points=[];aspect=fixed;html=1;align=center;shadow=0;dashed=0;image=img/lib/allied_telesis/computer_and_terminals/Server_Desktop.svg;" parent="11" vertex="1">
+                    <mxGeometry x="33.73655405989734" width="35.44210118253088" height="44.92660713278562" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="&lt;b&gt;generate_recipe&lt;/b&gt;&lt;br&gt;&lt;div&gt;(ROS Service)&lt;/div&gt;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Helvetica;fontSize=12;fontColor=default;" parent="56" vertex="1">
+                    <mxGeometry y="55" width="107.41891998423333" height="30" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
