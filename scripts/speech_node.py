@@ -103,6 +103,7 @@ class SpeechNode(object):
         ]
 
         try:
+            rospy.loginfo("start recording...")
             subprocess.run(
                 command,
                 check=True,
@@ -167,8 +168,6 @@ class SpeechNode(object):
         return self._normalized_transcript(transcript)
 
     def handle_transcribe(self, _request):
-        rospy.loginfo("start transcribing...")
-
         fd, audio_path = tempfile.mkstemp(
             prefix="chef_robot_assistant_speech_",
             suffix=".wav",
