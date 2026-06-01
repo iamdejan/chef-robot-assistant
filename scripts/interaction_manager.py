@@ -509,6 +509,7 @@ class InteractionManager(object):
             self.retry_count += 1
             if self.retry_count < self.speech_retry_limit:
                 self._say("Sorry, I cannot hear you. Please say it again.")
+                rospy.sleep(5.0)
 
         return None
 
