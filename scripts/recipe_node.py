@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 import time
+from typing import Optional, List
 
 import rospy
 
@@ -212,12 +214,41 @@ class RecipeNode(object):
             cuisine_text=cuisine_text,
         )
 
-    def _call_gemini_api(self, api_key, prompt):
+    def _call_gemini_api(self, api_key, prompt, allowed_responses: Optional[List[str]]=None):
+        """Call the Gemini API with an optional constrained response schema.
+
+        Parameters
+        ----------
+        api_key : str
+            Gemini API key.
+        prompt : str
+            Prompt text to send.
+        allowed_responses : list of str, optional
+            When provided, the API response is constrained via
+            ``generationConfig.responseSchema`` so that the model returns
+            exactly one of the allowed strings.
+
+        Returns
+        -------
+        tuple
+            (response_text, error_message).  ``response_text`` is empty
+            when ``error_message`` is non-empty.
+        """
         dependency_error = self._dependency_error_message()
         if dependency_error:
             return "", dependency_error
 
         url = GEMINI_API_URL_TEMPLATE.format(model=self.recipe_model_name)
+        generation_config = {
+            "temperature": self.recipe_temperature,
+            "maxOutputTokens": self.recipe_max_output_tokens,
+        }
+        if allowed_responses:
+            generation_config["responseMimeType"] = "text/x.enum"
+            generation_config["responseSchema"] = {
+                "type": "STRING",
+                "enum": allowed_responses,
+            }
         payload = {
             "contents": [
                 {
@@ -228,10 +259,7 @@ class RecipeNode(object):
                     ]
                 }
             ],
-            "generationConfig": {
-                "temperature": self.recipe_temperature,
-                "maxOutputTokens": self.recipe_max_output_tokens,
-            },
+            "generationConfig": generation_config,
         }
         headers = {
             "Content-Type": "application/json",
@@ -284,7 +312,15 @@ class RecipeNode(object):
 
         combined_text = "\n".join(text_parts).strip()
         if not combined_text:
-            return "", "Gemini API returned no recipe text"
+            return "", "Gemini API returned no text"
+
+        if allowed_responses:
+            try:
+                parsed = json.loads(combined_text)
+                if isinstance(parsed, str):
+                    combined_text = parsed
+            except (ValueError, TypeError):
+                pass
 
         return combined_text, ""
 
@@ -540,7 +576,9 @@ class RecipeNode(object):
             'Answer with only the word "yes" or "no".'.format(dish_name)
         )
 
-        raw_text, error = self._call_gemini_api(api_key, prompt)
+        raw_text, error = self._call_gemini_api(
+            api_key, prompt, allowed_responses=["yes", "no"]
+        )
         if error:
             rospy.logwarn("Dish validation API error: %s", error)
             return ValidateDishNameResponse(
