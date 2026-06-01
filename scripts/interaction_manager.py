@@ -9,15 +9,16 @@ from chef_robot_assistant.srv import GenerateDishImage
 from chef_robot_assistant.srv import GenerateRecipe
 from chef_robot_assistant.srv import SpeakText
 from chef_robot_assistant.srv import TranscribeSpeech
+from chef_robot_assistant.srv import ValidateDishName
 
 
 NODE_NAME = "interaction_manager"
-VALID_CUISINES = ("malay", "western", "chinese") 
-VALID_HEALTH_PREFS = ( 
-    "low fat", "high fat", "low protein", "high protein", 
+VALID_CUISINES = ("malay", "western", "chinese")
+VALID_HEALTH_PREFS = (
+    "low fat", "high fat", "low protein", "high protein",
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
-YES_WORDS = ("yes", "yeah", "yep")
+YES_WORDS = ("yes", "yeah", "yep", "ya")
 NO_WORDS = ("no", "nope")
 
 
@@ -30,8 +31,10 @@ class InteractionManager(object):
         self.cycle_in_progress = False
         self.prompt_restart_after_idle = False
         self.detected_ingredients = []
-        self.strict_ingredients = False 
+        self.strict_ingredients = False
         self.requested_dish = ""
+        self.invalid_dish_requested = False
+        self.invalid_dish_name = ""
         self.selected_cuisine = ""
         self.health_preference = ""
         self.allergies = ""
@@ -67,6 +70,7 @@ class InteractionManager(object):
         self._wait_for_service("generate_recipe")
         self._wait_for_service("generate_dish_image")
         self._wait_for_service("speak_text")
+        self._wait_for_service("validate_dish_name")
 
         self.detect_ingredients = rospy.ServiceProxy(
             "detect_ingredients",
@@ -85,6 +89,10 @@ class InteractionManager(object):
             GenerateDishImage
         )
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
+        self.validate_dish_name = rospy.ServiceProxy(
+            "validate_dish_name",
+            ValidateDishName
+        )
         self._clear_recipe_display_state()
 
         rospy.loginfo("%s ready for continuous interaction flow", NODE_NAME)
@@ -314,16 +322,16 @@ class InteractionManager(object):
         # FEAT: Health Preference
         self._set_state("ASK_HEALTH_PREFERENCE")
         self._say("Do you have health preferences, such as low fat, high protein, or low carbs?")
-        
+
         self._set_state("LISTEN_HEALTH_PREFERENCE")
         health_transcript = self._capture_transcript()
         if health_transcript is None:
             self._handle_retry_exhausted_shutdown()
             return
-            
+
         self._set_state("VALIDATE_HEALTH_PREFERENCE")
         self.health_preference = self._parse_health_preference(health_transcript)
-        
+
         if self.health_preference in ("no", ""):
             self.health_preference = ""
             self._say("Alright, no specific health preferences.")
@@ -359,8 +367,32 @@ class InteractionManager(object):
         self._set_state("VALIDATE_SPECIFIC_DISH")
         if any(word in dish_transcript for word in NO_WORDS):
             self.requested_dish = ""
+            self.invalid_dish_requested = False
+            self.invalid_dish_name = ""
         else:
-            self.requested_dish = dish_transcript
+            try:
+                validation = self.validate_dish_name(dish_transcript)
+                if validation.success and not validation.is_valid:
+                    self.requested_dish = ""
+                    self.invalid_dish_requested = True
+                    self.invalid_dish_name = dish_transcript
+                    rospy.logwarn(
+                        "Invalid dish name detected by Gemini: %s", dish_transcript
+                    )
+                else:
+                    self.requested_dish = dish_transcript
+                    self.invalid_dish_requested = False
+                    self.invalid_dish_name = ""
+                    if not validation.success:
+                        rospy.logwarn(
+                            "Dish validation service failed: %s",
+                            validation.message,
+                        )
+            except rospy.ServiceException as exc:
+                rospy.logerr("validate_dish_name service call failed: %s", exc)
+                self.requested_dish = dish_transcript
+                self.invalid_dish_requested = False
+                self.invalid_dish_name = ""
 
 
         self._set_state("ASK_CUISINE")
@@ -391,11 +423,11 @@ class InteractionManager(object):
             "Recipe generation",
             lambda: self.generate_recipe(
                 self.detected_ingredients,
-                self.selected_cuisine,      
-                self.requested_dish,      
+                self.selected_cuisine,
+                self.requested_dish,
                 self.health_preference,
-                self.allergies,   
-                self.strict_ingredients    
+                self.allergies,
+                self.strict_ingredients
             ),
             "Recipe generation failed. I will try again.",
             min_wait_seconds=self.recipe_retry_buffer_sec,
@@ -415,6 +447,11 @@ class InteractionManager(object):
         summary = self.recipe_result["spoken_summary"]
         missing = self.recipe_result["missing_ingredients"]
         self._publish_recipe_display_state()
+        if self.invalid_dish_requested:
+            summary = (
+                "I don't recognize '{0}' as a valid dish name. "
+                "I have generated a recipe based on your ingredients instead. {1}"
+            ).format(self.invalid_dish_name, summary)
         if missing:
             summary = "{0} You still need to buy: {1}.".format(
                 summary,
@@ -446,7 +483,7 @@ class InteractionManager(object):
             self.recipe_result["spoken_summary"],
             ", ".join(self.detected_ingredients)
         )
-        
+
         image_response = self._retry_service_call(
             "Image generation",
             lambda: self.generate_dish_image(
@@ -486,10 +523,10 @@ class InteractionManager(object):
         for pref in VALID_HEALTH_PREFS:
             if pref in transcript:
                 return pref
-        
+
         if any(word in transcript for word in NO_WORDS):
             return "no"
-            
+
         return ""
 
     def _parse_cuisine(self, transcript):
@@ -532,10 +569,12 @@ class InteractionManager(object):
         self.prompt_restart_after_idle = prompt_for_next_cycle
         self.detected_ingredients = []
         self.strict_ingredients = False
-        self.requested_dish = "" 
+        self.requested_dish = ""
+        self.invalid_dish_requested = False
+        self.invalid_dish_name = ""
         self.selected_cuisine = ""
         self.health_preference = ""
-        self.allergies = "" 
+        self.allergies = ""
         self.recipe_result = {}
         self.image_requested = False
         self._clear_recipe_display_state()

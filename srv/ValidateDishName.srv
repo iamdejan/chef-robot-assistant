@@ -1,0 +1,5 @@
+string dish_name
+---
+bool is_valid
+bool success
+string message

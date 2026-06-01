@@ -16,6 +16,7 @@ add_service_files(
   GenerateRecipe.srv
   SpeakText.srv
   TranscribeSpeech.srv
+  ValidateDishName.srv
 )
 
 generate_messages(
