@@ -42,10 +42,6 @@ class InteractionManager(object):
         self.image_requested = False
 
         self.camera_topic = self._param("camera_topic", "/camera/image_raw")
-        self.camera_frame_topic_out = self._param(
-            "camera_frame_topic_out",
-            "/chef_robot_assistant/image_raw"
-        )
         self.detection_confidence_threshold = self._param(
             "detection_confidence_threshold",
             0.5
