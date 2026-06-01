@@ -41,7 +41,6 @@ class InteractionManager(object):
         self.recipe_result = {}
         self.image_requested = False
 
-        self.camera_topic = self._param("camera_topic", "/camera/image_raw")
         self.detection_confidence_threshold = self._param(
             "detection_confidence_threshold",
             0.5
