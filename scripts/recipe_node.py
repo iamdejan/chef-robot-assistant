@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 import time
+from typing import Optional, List
 
 import rospy
 
 from chef_robot_assistant.srv import GenerateRecipe
 from chef_robot_assistant.srv import GenerateRecipeResponse
+from chef_robot_assistant.srv import ValidateDishName
+from chef_robot_assistant.srv import ValidateDishNameResponse
 
 try:
     import requests
@@ -51,6 +55,9 @@ class RecipeNode(object):
         self.dotenv_path = os.path.join(self.repo_root, ".env")
 
         rospy.Service("generate_recipe", GenerateRecipe, self.handle_recipe)
+        rospy.Service(
+            "validate_dish_name", ValidateDishName, self.handle_validate_dish_name
+        )
         rospy.loginfo(
             "%s ready with Gemini model %s",
             NODE_NAME,
@@ -130,7 +137,7 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", allergies="", strict=False, missing_required=None, only_use_detected=False): 
+    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", allergies="", strict=False, missing_required=None, only_use_detected=False):
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
         restriction_lines = ""
@@ -167,7 +174,7 @@ class RecipeNode(object):
                 strict_lines += "The previous response missed: {0}\n".format(
                     ", ".join(missing_required)
                 )
-        
+
         dish_lines = ""
         if requested_dish:
             dish_lines = (
@@ -179,9 +186,9 @@ class RecipeNode(object):
             "You are a practical cooking assistant for a home robot.\n"
             "Generate one concise recipe in English.\n"
             "Use the detected ingredients as the main ingredients.\n"
-            "{health_lines}" 
+            "{health_lines}"
             "{allergy_lines}"
-            "{dish_lines}" 
+            "{dish_lines}"
             "{strict_lines}"
             "{restriction_lines}"
             "List only the extra ingredients the user must buy in Missing Ingredients.\n"
@@ -207,12 +214,41 @@ class RecipeNode(object):
             cuisine_text=cuisine_text,
         )
 
-    def _call_gemini_api(self, api_key, prompt):
+    def _call_gemini_api(self, api_key, prompt, allowed_responses: Optional[List[str]]=None):
+        """Call the Gemini API with an optional constrained response schema.
+
+        Parameters
+        ----------
+        api_key : str
+            Gemini API key.
+        prompt : str
+            Prompt text to send.
+        allowed_responses : list of str, optional
+            When provided, the API response is constrained via
+            ``generationConfig.responseSchema`` so that the model returns
+            exactly one of the allowed strings.
+
+        Returns
+        -------
+        tuple
+            (response_text, error_message).  ``response_text`` is empty
+            when ``error_message`` is non-empty.
+        """
         dependency_error = self._dependency_error_message()
         if dependency_error:
             return "", dependency_error
 
         url = GEMINI_API_URL_TEMPLATE.format(model=self.recipe_model_name)
+        generation_config = {
+            "temperature": self.recipe_temperature,
+            "maxOutputTokens": self.recipe_max_output_tokens,
+        }
+        if allowed_responses:
+            generation_config["responseMimeType"] = "text/x.enum"
+            generation_config["responseSchema"] = {
+                "type": "STRING",
+                "enum": allowed_responses,
+            }
         payload = {
             "contents": [
                 {
@@ -223,10 +259,7 @@ class RecipeNode(object):
                     ]
                 }
             ],
-            "generationConfig": {
-                "temperature": self.recipe_temperature,
-                "maxOutputTokens": self.recipe_max_output_tokens,
-            },
+            "generationConfig": generation_config,
         }
         headers = {
             "Content-Type": "application/json",
@@ -279,7 +312,15 @@ class RecipeNode(object):
 
         combined_text = "\n".join(text_parts).strip()
         if not combined_text:
-            return "", "Gemini API returned no recipe text"
+            return "", "Gemini API returned no text"
+
+        if allowed_responses:
+            try:
+                parsed = json.loads(combined_text)
+                if isinstance(parsed, str):
+                    combined_text = parsed
+            except (ValueError, TypeError):
+                pass
 
         return combined_text, ""
 
@@ -390,7 +431,7 @@ class RecipeNode(object):
         health_preference = re.sub(r"\s+", " ", str(request.health_preference).strip().lower())
         allergies = str(request.allergies).strip()
         strict_ingredients = request.strict_ingredients
-        
+
         if not ingredients:
             return GenerateRecipeResponse(
                 success=False,
@@ -462,11 +503,11 @@ class RecipeNode(object):
             )
             if not missing_required:
                 rospy.loginfo(
-                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s", 
+                    "Generated recipe '%s' for cuisine=%s ingredients=%s dish=%s",
                     parsed_recipe["dish_name"],
                     cuisine or "mixed",
                     ", ".join(ingredients),
-                    requested_dish or "none" 
+                    requested_dish or "none"
                 )
                 return GenerateRecipeResponse(
                     success=True,
@@ -493,6 +534,72 @@ class RecipeNode(object):
                     ", ".join(missing_required)
                 )
             ),
+        )
+
+    def handle_validate_dish_name(self, request):
+        """Validate whether a dish name is a real food dish using Gemini.
+
+        Parameters
+        ----------
+        request : ValidateDishNameRequest
+            Contains the ``dish_name`` string to validate.
+
+        Returns
+        -------
+        ValidateDishNameResponse
+            Fields:
+            - ``is_valid`` (bool): True if Gemini confirms the dish is valid,
+              False otherwise.
+            - ``success`` (bool): True if the API call completed without error.
+            - ``message`` (str): Status or error description.
+        """
+        dish_name = str(request.dish_name).strip()
+        if not dish_name:
+            return ValidateDishNameResponse(
+                is_valid=False,
+                success=True,
+                message="empty dish name",
+            )
+
+        api_key, api_key_error = self._read_gemini_api_key()
+        if not api_key:
+            rospy.logwarn(api_key_error)
+            return ValidateDishNameResponse(
+                is_valid=True,
+                success=False,
+                message=api_key_error,
+            )
+
+        prompt = (
+            'Is "{0}" the name of a real, edible food dish? '
+            'Answer with only the word "yes" or "no".'.format(dish_name)
+        )
+
+        raw_text, error = self._call_gemini_api(
+            api_key, prompt, allowed_responses=["yes", "no"]
+        )
+        if error:
+            rospy.logwarn("Dish validation API error: %s", error)
+            return ValidateDishNameResponse(
+                is_valid=True,
+                success=False,
+                message=error,
+            )
+
+        normalized = raw_text.strip().lower()
+        is_valid = normalized.startswith("yes")
+
+        rospy.loginfo(
+            "Dish validation for '%s': %s (raw='%s')",
+            dish_name,
+            is_valid,
+            raw_text.strip(),
+        )
+
+        return ValidateDishNameResponse(
+            is_valid=is_valid,
+            success=True,
+            message="validation succeeded",
         )
 
 

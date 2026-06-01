@@ -9,6 +9,7 @@ from chef_robot_assistant.srv import GenerateDishImage
 from chef_robot_assistant.srv import GenerateRecipe
 from chef_robot_assistant.srv import SpeakText
 from chef_robot_assistant.srv import TranscribeSpeech
+from chef_robot_assistant.srv import ValidateDishName
 
 
 NODE_NAME = "interaction_manager"
@@ -17,7 +18,7 @@ VALID_HEALTH_PREFS = (
     "low fat", "high fat", "low protein", "high protein",
     "low fiber", "high fiber", "low carbs", "high carbs"
 )
-YES_WORDS = ("yes", "yeah", "yep")
+YES_WORDS = ("yes", "yeah", "yep", "ya")
 NO_WORDS = ("no", "nope")
 
 
@@ -32,6 +33,8 @@ class InteractionManager(object):
         self.detected_ingredients = []
         self.strict_ingredients = False
         self.requested_dish = ""
+        self.invalid_dish_requested = False
+        self.invalid_dish_name = ""
         self.selected_cuisine = ""
         self.health_preference = ""
         self.allergies = ""
@@ -63,6 +66,7 @@ class InteractionManager(object):
         self._wait_for_service("generate_recipe")
         self._wait_for_service("generate_dish_image")
         self._wait_for_service("speak_text")
+        self._wait_for_service("validate_dish_name")
 
         self.detect_ingredients = rospy.ServiceProxy(
             "detect_ingredients",
@@ -81,6 +85,10 @@ class InteractionManager(object):
             GenerateDishImage
         )
         self.speak_text = rospy.ServiceProxy("speak_text", SpeakText)
+        self.validate_dish_name = rospy.ServiceProxy(
+            "validate_dish_name",
+            ValidateDishName
+        )
         self._clear_recipe_display_state()
 
         rospy.loginfo("%s ready for continuous interaction flow", NODE_NAME)
@@ -355,8 +363,32 @@ class InteractionManager(object):
         self._set_state("VALIDATE_SPECIFIC_DISH")
         if any(word in dish_transcript for word in NO_WORDS):
             self.requested_dish = ""
+            self.invalid_dish_requested = False
+            self.invalid_dish_name = ""
         else:
-            self.requested_dish = dish_transcript
+            try:
+                validation = self.validate_dish_name(dish_transcript)
+                if validation.success and not validation.is_valid:
+                    self.requested_dish = ""
+                    self.invalid_dish_requested = True
+                    self.invalid_dish_name = dish_transcript
+                    rospy.logwarn(
+                        "Invalid dish name detected by Gemini: %s", dish_transcript
+                    )
+                else:
+                    self.requested_dish = dish_transcript
+                    self.invalid_dish_requested = False
+                    self.invalid_dish_name = ""
+                    if not validation.success:
+                        rospy.logwarn(
+                            "Dish validation service failed: %s",
+                            validation.message,
+                        )
+            except rospy.ServiceException as exc:
+                rospy.logerr("validate_dish_name service call failed: %s", exc)
+                self.requested_dish = dish_transcript
+                self.invalid_dish_requested = False
+                self.invalid_dish_name = ""
 
 
         self._set_state("ASK_CUISINE")
@@ -411,6 +443,11 @@ class InteractionManager(object):
         summary = self.recipe_result["spoken_summary"]
         missing = self.recipe_result["missing_ingredients"]
         self._publish_recipe_display_state()
+        if self.invalid_dish_requested:
+            summary = (
+                "I don't recognize '{0}' as a valid dish name. "
+                "I have generated a recipe based on your ingredients instead. {1}"
+            ).format(self.invalid_dish_name, summary)
         if missing:
             summary = "{0} You still need to buy: {1}.".format(
                 summary,
@@ -529,6 +566,8 @@ class InteractionManager(object):
         self.detected_ingredients = []
         self.strict_ingredients = False
         self.requested_dish = ""
+        self.invalid_dish_requested = False
+        self.invalid_dish_name = ""
         self.selected_cuisine = ""
         self.health_preference = ""
         self.allergies = ""
