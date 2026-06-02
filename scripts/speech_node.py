@@ -103,6 +103,7 @@ class SpeechNode(object):
         ]
 
         try:
+            rospy.loginfo("start recording...")
             subprocess.run(
                 command,
                 check=True,

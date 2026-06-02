@@ -53,7 +53,7 @@ class VisionNode(object):
         self.frame_lock = threading.Lock()
         self.client_lock = threading.Lock()
 
-        self.camera_topic = self._param("camera_topic", "/camera/image_raw")
+        self.camera_topic = self._param("camera_topic", "/usb_cam/image_raw")
         self.camera_frame_topic_out = self._param(
             "camera_frame_topic_out",
             "/chef_robot_assistant/image_annotated"
