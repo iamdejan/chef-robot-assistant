@@ -41,7 +41,6 @@ class InteractionManager(object):
         self.recipe_result = {}
         self.image_requested = False
 
-        self.camera_topic = self._param("camera_topic", "/camera/image_raw")
         self.detection_confidence_threshold = self._param(
             "detection_confidence_threshold",
             0.5
@@ -60,6 +59,7 @@ class InteractionManager(object):
             "image_generation_enabled",
             True
         )
+        self.wait_for_retry_prompt_sec = self._param("wait_for_retry_prompt_sec", 2.5)
 
         self._wait_for_service("detect_ingredients")
         self._wait_for_service("transcribe_speech")
@@ -509,6 +509,7 @@ class InteractionManager(object):
             self.retry_count += 1
             if self.retry_count < self.speech_retry_limit:
                 self._say("Sorry, I cannot hear you. Please say it again.")
+                rospy.sleep(self.wait_for_retry_prompt_sec)
 
         return None
 

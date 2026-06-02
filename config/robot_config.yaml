@@ -3,6 +3,7 @@ chef_robot_assistant:
   camera_frame_topic_out: "/chef_robot_assistant/image_annotated"
   detection_confidence_threshold: 0.5
   capture_duration_sec: 3.0
+  wait_for_retry_prompt_sec: 2.5
   vision_workspace_name: "lee-zhi-yang"
   vision_workflow_id: "ingredient-detection-api"
   vision_sample_frame_count: 3
