@@ -35,6 +35,20 @@ GEMINI_API_URL_TEMPLATE = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
 
+RECIPE_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "dish_name": {"type": "string"},
+        "spoken_summary": {"type": "string"},
+        "missing_ingredients": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "full_recipe": {"type": "string"},
+    },
+    "required": ["dish_name", "spoken_summary", "full_recipe"],
+}
+
 
 class RecipeNode(object):
     def __init__(self):
@@ -197,13 +211,11 @@ class RecipeNode(object):
             "Keep the recipe practical and concise.\n\n"
             "Detected ingredients: {ingredient_text}\n"
             "Requested cuisine: {cuisine_text}\n\n"
-            "Return exactly these labeled sections:\n"
-            "Dish Name: <short dish name>\n"
-            "Spoken Summary: <1-2 sentence summary>\n"
-            "Missing Ingredients:\n"
-            "- <one item per line or 'none'>\n"
-            "Full Recipe:\n"
-            "<short ingredient list and numbered cooking steps>"
+            "Return the recipe as a JSON object with exactly these keys:\n"
+            "- \"dish_name\": short dish name\n"
+            "- \"spoken_summary\": 1-2 sentence summary\n"
+            "- \"missing_ingredients\": list of extra ingredients needed (empty list if none)\n"
+            "- \"full_recipe\": short ingredient list and numbered cooking steps"
         ).format(
             health_lines=health_lines,
             allergy_lines=allergy_lines,
@@ -214,7 +226,7 @@ class RecipeNode(object):
             cuisine_text=cuisine_text,
         )
 
-    def _call_gemini_api(self, api_key, prompt, allowed_responses: Optional[List[str]]=None):
+    def _call_gemini_api(self, api_key, prompt, allowed_responses: Optional[List[str]]=None, response_schema: Optional[dict]=None):
         """Call the Gemini API with an optional constrained response schema.
 
         Parameters
@@ -227,12 +239,17 @@ class RecipeNode(object):
             When provided, the API response is constrained via
             ``generationConfig.responseSchema`` so that the model returns
             exactly one of the allowed strings.
+        response_schema : dict, optional
+            When provided, the API response is constrained to valid JSON
+            matching the supplied OpenAPI schema object.  The returned
+            ``response_text`` will be the parsed dict.
 
         Returns
         -------
         tuple
             (response_text, error_message).  ``response_text`` is empty
-            when ``error_message`` is non-empty.
+            when ``error_message`` is non-empty.  If ``response_schema``
+            is provided, ``response_text`` is a dict.
         """
         dependency_error = self._dependency_error_message()
         if dependency_error:
@@ -249,6 +266,9 @@ class RecipeNode(object):
                 "type": "STRING",
                 "enum": allowed_responses,
             }
+        elif response_schema:
+            generation_config["responseMimeType"] = "application/json"
+            generation_config["responseSchema"] = response_schema
         payload = {
             "contents": [
                 {
@@ -321,6 +341,16 @@ class RecipeNode(object):
                     combined_text = parsed
             except (ValueError, TypeError):
                 pass
+            return combined_text, ""
+
+        if response_schema:
+            try:
+                parsed = json.loads(combined_text)
+                if not isinstance(parsed, dict):
+                    return "", "Gemini API returned a non-object JSON response"
+                return parsed, ""
+            except (ValueError, TypeError) as exc:
+                return "", "Gemini API returned invalid JSON: {0}".format(exc)
 
         return combined_text, ""
 
@@ -472,7 +502,9 @@ class RecipeNode(object):
                 missing_required=missing_required,
                 only_use_detected=strict_ingredients
             )
-            raw_text, recipe_error = self._call_gemini_api(api_key, prompt)
+            recipe_data, recipe_error = self._call_gemini_api(
+                api_key, prompt, response_schema=RECIPE_RESPONSE_SCHEMA
+            )
             if recipe_error:
                 rospy.logwarn(recipe_error)
                 return GenerateRecipeResponse(
@@ -484,17 +516,65 @@ class RecipeNode(object):
                     message=recipe_error,
                 )
 
-            parsed_recipe, parse_error = self._parse_recipe_sections(raw_text)
-            if parse_error:
-                rospy.logwarn("Failed to parse Gemini recipe output: %s", parse_error)
+            if not isinstance(recipe_data, dict):
+                rospy.logwarn("Unexpected Gemini recipe response format")
                 return GenerateRecipeResponse(
                     success=False,
                     dish_name="",
                     spoken_summary="",
                     full_recipe_text="",
                     missing_ingredients=[],
-                    message=parse_error,
+                    message="unexpected API response format",
                 )
+
+            dish_name = str(recipe_data.get("dish_name", "")).strip()
+            spoken_summary = str(recipe_data.get("spoken_summary", "")).strip()
+            full_recipe_text = str(recipe_data.get("full_recipe", "")).strip()
+            missing_ingredients_raw = recipe_data.get("missing_ingredients", [])
+            if isinstance(missing_ingredients_raw, list):
+                missing_ingredients_text = "\n".join(
+                    str(item) for item in missing_ingredients_raw
+                )
+            else:
+                missing_ingredients_text = str(missing_ingredients_raw)
+            missing_ingredients = self._parse_missing_ingredients(
+                missing_ingredients_text
+            )
+
+            if not dish_name:
+                return GenerateRecipeResponse(
+                    success=False,
+                    dish_name="",
+                    spoken_summary="",
+                    full_recipe_text="",
+                    missing_ingredients=[],
+                    message="recipe output is missing 'dish_name'",
+                )
+            if not spoken_summary:
+                return GenerateRecipeResponse(
+                    success=False,
+                    dish_name="",
+                    spoken_summary="",
+                    full_recipe_text="",
+                    missing_ingredients=[],
+                    message="recipe output is missing 'spoken_summary'",
+                )
+            if not full_recipe_text:
+                return GenerateRecipeResponse(
+                    success=False,
+                    dish_name="",
+                    spoken_summary="",
+                    full_recipe_text="",
+                    missing_ingredients=[],
+                    message="recipe output is missing 'full_recipe'",
+                )
+
+            parsed_recipe = {
+                "dish_name": dish_name,
+                "spoken_summary": spoken_summary,
+                "full_recipe_text": full_recipe_text,
+                "missing_ingredients": missing_ingredients,
+            }
 
             missing_required = self._find_missing_detected_ingredients(
                 ingredients,

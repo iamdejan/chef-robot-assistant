@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Context of the Project
+
+OS: Ubuntu 20.04
+Python: 3.8.10
+ROS version: ROS Noetic Ninjemys
+
 ## Code Generation
 
 For function signatures, include the type from `typing` package. Optional arguments should be put after mandatory arguments.
