@@ -101,18 +101,16 @@ roslaunch chef_robot_assistant foundation.launch
 
 1. Place at least `2` supported ingredients in front of the camera.
 2. Wait for the robot to detect and announce the ingredients.
-3. Say one cuisine clearly:
-   - `malay`
-   - `western`
-   - `chinese`
-4. When asked about image generation, say:
-   - `yes`
-   - `no`
-5. After the cycle finishes, the robot may ask:
-   - `Do you want me to start again?`
-6. Say:
-   - `yes` to start another cycle
-   - `no` to leave the robot idle
+3. Answer the questions from the robot. List of questions:
+   a. Are you able to buy missing ingredients? (yes / no)
+   b. Do you have health preferences, such as low fat, high protein, or low carbs? (low fat / high fat / low protein / high protein / low fiber / high fiber / low carbs / high carbs)
+   c. Do you have any food allergies? (yes / no)
+   d. Do you have a specific dish in mind? (just say dish name without "I want")
+   e. I am generating a recipe for you. Do you want Malay, Western or Chinese food? (Malay / Chinese / Western)
+4. Recipe will be generated, and the recipe summary will be spoken by the robot.
+5. Answer the question from the robot: "Do you want me to generate an image of the dish?" (yes / no)
+   a. If the image of the dish is successfully generated, the robot will say "Here is an example image of the dish. Thank you for using me."
+6. The program is finished. The robot will ask: "Do you want me to start again?" (yes / no)
 
 ### Stopping the System
 
