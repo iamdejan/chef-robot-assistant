@@ -180,7 +180,7 @@ class RecipeNode(object):
         if ingredients:
             lines.append("Ingredients:")
             for item in ingredients:
-                lines.append("• {0}".format(item))
+                lines.append("- {0}".format(item))
             lines.append("")
 
         if steps:
