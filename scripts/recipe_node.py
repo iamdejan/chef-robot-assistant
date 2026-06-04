@@ -435,66 +435,6 @@ class RecipeNode(object):
                 unique_items.append(item)
         return unique_items
 
-    def _parse_recipe_sections(self, raw_text):
-        sections = {
-            "dish_name": [],
-            "spoken_summary": [],
-            "missing_ingredients": [],
-            "full_recipe": [],
-        }
-        label_map = {
-            "dish name:": "dish_name",
-            "spoken summary:": "spoken_summary",
-            "missing ingredients:": "missing_ingredients",
-            "full recipe:": "full_recipe",
-        }
-
-        current_section = None
-        for raw_line in raw_text.splitlines():
-            line = raw_line.rstrip()
-            stripped = line.strip()
-            lowered = stripped.lower()
-
-            matched_section = None
-            for label, section_name in label_map.items():
-                if lowered.startswith(label):
-                    matched_section = section_name
-                    current_section = section_name
-                    remainder = stripped[len(label):].strip()
-                    if remainder:
-                        sections[section_name].append(remainder)
-                    break
-
-            if matched_section:
-                continue
-
-            if current_section is not None:
-                sections[current_section].append(stripped)
-
-        dish_name = " ".join(line for line in sections["dish_name"] if line).strip()
-        spoken_summary = " ".join(
-            line for line in sections["spoken_summary"] if line
-        ).strip()
-        full_recipe_text = "\n".join(
-            line for line in sections["full_recipe"] if line
-        ).strip()
-        missing_ingredients = self._parse_missing_ingredients(
-            "\n".join(sections["missing_ingredients"])
-        )
-
-        if not dish_name:
-            return None, "recipe output is missing 'Dish Name'"
-        if not spoken_summary:
-            return None, "recipe output is missing 'Spoken Summary'"
-        if not full_recipe_text:
-            return None, "recipe output is missing 'Full Recipe'"
-
-        return {
-            "dish_name": dish_name,
-            "spoken_summary": spoken_summary,
-            "full_recipe_text": full_recipe_text,
-            "missing_ingredients": missing_ingredients,
-        }, ""
 
     def handle_recipe(self, request):
         ingredients = []
