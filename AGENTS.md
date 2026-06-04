@@ -10,4 +10,4 @@ ROS version: ROS Noetic Ninjemys
 
 For function signatures, include the type from `typing` package. Optional arguments should be put after mandatory arguments.
 
-You have to add documentation for functions and classes. The documentation should follow NumPy style. The documentation should contain what is the function for (basically the description), a brief summary of the steps, and input and output parameters. If your function has the ability to throw error, please state it in the documentation as well.
+You have to add documentation for new and existing functions and classes. The documentation should follow NumPy style. The documentation should contain what is the function for (basically the description), a brief summary of the steps, and input and output parameters. If your function has the ability to throw error, please state it in the documentation as well.

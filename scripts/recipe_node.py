@@ -151,7 +151,53 @@ class RecipeNode(object):
         pattern = r"(^|\s){0}($|\s)".format(re.escape(normalized_ingredient))
         return re.search(pattern, normalized_text) is not None
 
-    def _build_prompt(self, ingredients, cuisine, requested_dish="", health_preference="", allergies="", strict=False, missing_required=None, only_use_detected=False):
+    def _build_prompt(
+        self,
+        ingredients,
+        cuisine,
+        requested_dish="",
+        health_preference="",
+        allergies="",
+        strict=False,
+        missing_required=None,
+        only_use_detected=False,
+    ):
+        """Construct the prompt text for the Gemini recipe generation API.
+
+        Builds a structured prompt that includes detected ingredients, cuisine,
+        dietary restrictions, allergies, and optional strictness instructions.
+        The prompt asks the model to return a JSON object with specific keys.
+
+        Parameters
+        ----------
+        ingredients : list of str
+            Detected ingredients to include in the recipe.
+        cuisine : str
+            Desired cuisine type (e.g., "italian", "chinese").
+        requested_dish : str, optional
+            Specific dish name the user wants to prepare. Defaults to "".
+        health_preference : str, optional
+            Dietary preference (e.g., "vegetarian", "low-sodium").
+            Ignored if empty or equal to "no". Defaults to "".
+        allergies : str, optional
+            Comma-separated list of ingredients to exclude.
+            Ignored if empty or equal to "no". Defaults to "".
+        strict : bool, optional
+            If True, requires every detected ingredient to appear in the
+            recipe and references any previously missing ingredients.
+            Defaults to False.
+        missing_required : list of str, optional
+            Ingredients that were missing in a previous attempt; only used
+            when ``strict`` is True. Defaults to None.
+        only_use_detected : bool, optional
+            If True, disallows any extra ingredients beyond those detected.
+            Defaults to False.
+
+        Returns
+        -------
+        str
+            The formatted prompt ready to be sent to the Gemini API.
+        """
         ingredient_text = ", ".join(ingredients)
         cuisine_text = cuisine or "mixed"
         restriction_lines = ""
