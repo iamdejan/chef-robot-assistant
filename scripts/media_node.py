@@ -82,6 +82,7 @@ class MediaNode(object):
         self.current_recipe_is_stale = False
         self.recipe_window_dirty = False
         self.image_window_dirty = False
+        self.recipe_scroll_offset = 0
 
         self._initialize_display_support()
         os.makedirs(self.image_output_dir, exist_ok=True)
@@ -120,6 +121,7 @@ class MediaNode(object):
                 self.display_window_width,
                 self.display_window_height,
             )
+            cv2.setMouseCallback(self.recipe_window_name, self._on_recipe_mouse)
         except cv2.error as exc:
             rospy.logwarn("Display disabled because OpenCV window init failed: %s", exc)
             self.display_window_enabled = False
@@ -199,7 +201,102 @@ class MediaNode(object):
                 lines.append("")
         return lines
 
-    def _render_recipe_canvas(self, spoken_text):
+    def _compute_content_height(self, spoken_text):
+        """
+        Calculate the total vertical pixel height of the recipe content.
+
+        This performs a dry-run of the layout logic used by
+        ``_render_recipe_canvas`` so that the maximum scroll offset can be
+        clamped correctly.
+
+        Parameters
+        ----------
+        spoken_text : str
+            The text that the robot is currently speaking (if any).
+
+        Returns
+        -------
+        int
+            Estimated content height in pixels.
+        """
+        y = 50
+        margin = 40
+        max_width_chars = max(50, int((self.display_window_width - margin * 2) / 16))
+
+        recipe_data = self._load_recipe_display_data()
+        if recipe_data is None:
+            recipe_data = self.current_recipe_data
+
+        y += 45  # app_title
+
+        if spoken_text:
+            y += 34  # Robot Says header
+            y += len(self._wrap_text(spoken_text, max_width_chars)) * 28
+            y += 20
+
+        if self.current_recipe_is_stale and recipe_data:
+            y += 36
+
+        y += 34  # title_label
+        y += 45  # dish_title
+
+        if recipe_data and recipe_data.get("missing_ingredients"):
+            missing_text = "Need to buy: {0}".format(
+                ", ".join(recipe_data["missing_ingredients"])
+            )
+            y += len(self._wrap_text(missing_text, max_width_chars)) * 28
+            y += 10
+
+        if recipe_data and recipe_data.get("full_recipe_text"):
+            y += 36  # Recipe label
+            y += len(self._wrap_text(recipe_data["full_recipe_text"], max_width_chars)) * 24
+
+        return y
+
+    def _on_recipe_mouse(self, event, x, y, flags, param):
+        """
+        Handle mouse wheel events on the recipe window for scrolling.
+
+        Parameters
+        ----------
+        event : int
+            OpenCV mouse event type.
+        x : int
+            X coordinate of the mouse event.
+        y : int
+            Y coordinate of the mouse event.
+        flags : int
+            Event flags (scroll direction is encoded here on Linux/GTK).
+        param : Any
+            User parameter passed to the callback.
+        """
+        if event != cv2.EVENT_MOUSEWHEEL:
+            return
+
+        if flags > 0:
+            self.recipe_scroll_offset = max(0, self.recipe_scroll_offset - 30)
+        else:
+            total_height = self._compute_content_height(self.current_spoken_text)
+            max_scroll = max(0, total_height - self.display_window_height)
+            self.recipe_scroll_offset = min(max_scroll, self.recipe_scroll_offset + 30)
+        self.recipe_window_dirty = True
+
+    def _render_recipe_canvas(self, spoken_text, scroll_offset=0):
+        """
+        Render the recipe window canvas with optional vertical scrolling.
+
+        Parameters
+        ----------
+        spoken_text : str
+            The text that the robot is currently speaking (if any).
+        scroll_offset : int, optional
+            Number of pixels to shift the content upward. The default is 0.
+
+        Returns
+        -------
+        numpy.ndarray
+            The rendered canvas image.
+        """
         canvas = np.full(
             (self.display_window_height, self.display_window_width, 3),
             245,
@@ -225,164 +322,105 @@ class MediaNode(object):
         if recipe_data and recipe_data.get("dish_name"):
             dish_title = recipe_data["dish_name"]
 
-        cv2.putText(
-            canvas,
-            app_title,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 45
-
-        if spoken_text:
-            cv2.putText(
-                canvas,
-                "Robot Says",
-                (margin, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                accent,
-                2,
-                cv2.LINE_AA,
-            )
-            y += 34
-            for line in self._wrap_text(spoken_text, max_width_chars):
+        def put_text(text, font, scale, text_color, thickness, line_height):
+            nonlocal y
+            draw_y = y - scroll_offset
+            if 0 <= draw_y <= self.display_window_height + 10:
                 cv2.putText(
                     canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    color,
-                    1,
+                    text,
+                    (margin, draw_y),
+                    font,
+                    scale,
+                    text_color,
+                    thickness,
                     cv2.LINE_AA,
                 )
-                y += 28
+            y += line_height
+
+        put_text(app_title, cv2.FONT_HERSHEY_SIMPLEX, 1.0, accent, 2, 45)
+
+        if spoken_text:
+            put_text("Robot Says", cv2.FONT_HERSHEY_SIMPLEX, 0.8, accent, 2, 34)
+            for line in self._wrap_text(spoken_text, max_width_chars):
+                put_text(line, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 1, 28)
             y += 20
 
         if self.current_recipe_is_stale and recipe_data:
-            cv2.putText(
-                canvas,
+            put_text(
                 "Previous Dish and Recipe",
-                (margin, y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.75,
                 (0, 0, 180),
                 2,
-                cv2.LINE_AA,
+                36,
             )
-            y += 36
 
         title_label = "Dish Name"
         if self.current_recipe_is_stale and recipe_data:
             title_label = "Previous Dish Name"
 
-        cv2.putText(
-            canvas,
-            title_label,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 34
-
-        cv2.putText(
-            canvas,
-            dish_title,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 45
+        put_text(title_label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, accent, 2, 34)
+        put_text(dish_title, cv2.FONT_HERSHEY_SIMPLEX, 1.0, accent, 2, 45)
 
         if recipe_data and recipe_data.get("missing_ingredients"):
             missing_text = "Need to buy: {0}".format(
                 ", ".join(recipe_data["missing_ingredients"])
             )
             for line in self._wrap_text(missing_text, max_width_chars):
-                cv2.putText(
-                    canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.65,
-                    (0, 0, 180),
-                    2,
-                    cv2.LINE_AA,
-                )
-                y += 28
+                put_text(line, cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 180), 2, 28)
             y += 10
 
         if recipe_data and recipe_data.get("full_recipe_text"):
             recipe_label = "Recipe"
             if self.current_recipe_is_stale:
                 recipe_label = "Previous Recipe"
-            cv2.putText(
-                canvas,
-                recipe_label,
-                (margin, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                accent,
-                2,
-                cv2.LINE_AA,
-            )
-            y += 36
+            put_text(recipe_label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, accent, 2, 36)
             for line in self._wrap_text(recipe_data["full_recipe_text"], max_width_chars):
-                if y > self.display_window_height - 20:
-                    break
-                cv2.putText(
-                    canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    color,
-                    1,
-                    cv2.LINE_AA,
-                )
-                y += 24
+                put_text(line, cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 1, 24)
 
         return canvas
 
-    def _refresh_recipe_window(self):
+    def _refresh_recipe_window(self, scroll_offset=0):
+        """
+        Refresh the recipe display window.
+
+        Parameters
+        ----------
+        scroll_offset : int, optional
+            Vertical scroll offset in pixels. The default is 0.
+        """
         if not self.display_window_enabled:
             return
 
-        canvas = self._render_recipe_canvas(self.current_spoken_text)
+        canvas = self._render_recipe_canvas(self.current_spoken_text, scroll_offset)
         try:
             cv2.imshow(self.recipe_window_name, canvas)
-            cv2.waitKey(1)
         except cv2.error as exc:
             rospy.logwarn("Disabling display after recipe window failure: %s", exc)
             self.display_window_enabled = False
 
     def _refresh_image_window(self):
+        """Refresh the generated image display window."""
         if not self.display_window_enabled or self.current_image is None:
             return
 
         try:
             cv2.namedWindow(self.image_window_name, cv2.WINDOW_NORMAL)
             cv2.imshow(self.image_window_name, self.current_image)
-            cv2.waitKey(1)
         except cv2.error as exc:
             rospy.logwarn("Failed to show generated image window: %s", exc)
 
     def _pump_windows(self):
+        """Process window updates and handle user input for scrolling."""
         if not self.display_window_enabled:
             return
 
         if self.recipe_window_dirty:
-            self._refresh_recipe_window()
+            total_height = self._compute_content_height(self.current_spoken_text)
+            max_scroll = max(0, total_height - self.display_window_height)
+            self.recipe_scroll_offset = min(self.recipe_scroll_offset, max_scroll)
+            self._refresh_recipe_window(self.recipe_scroll_offset)
             self.recipe_window_dirty = False
 
         if self.image_window_dirty:
@@ -390,9 +428,33 @@ class MediaNode(object):
             self.image_window_dirty = False
 
         try:
-            cv2.waitKey(1)
+            key = cv2.waitKey(1)
         except cv2.error:
-            pass
+            return
+
+        if key == -1:
+            return
+
+        scroll_step = 50
+        total_height = self._compute_content_height(self.current_spoken_text)
+        max_scroll = max(0, total_height - self.display_window_height)
+
+        if key == 65362:  # Up arrow
+            self.recipe_scroll_offset = max(0, self.recipe_scroll_offset - scroll_step)
+        elif key == 65364:  # Down arrow
+            self.recipe_scroll_offset = min(max_scroll, self.recipe_scroll_offset + scroll_step)
+        elif key == 65365:  # PageUp
+            self.recipe_scroll_offset = max(0, self.recipe_scroll_offset - self.display_window_height)
+        elif key == 65366:  # PageDown
+            self.recipe_scroll_offset = min(max_scroll, self.recipe_scroll_offset + self.display_window_height)
+        elif key == 65360:  # Home
+            self.recipe_scroll_offset = 0
+        elif key == 65367:  # End
+            self.recipe_scroll_offset = max_scroll
+        else:
+            return
+
+        self._refresh_recipe_window(self.recipe_scroll_offset)
 
     def _speak_text(self, text):
         if not self.espeak_path:
