@@ -44,7 +44,21 @@ RECIPE_RESPONSE_SCHEMA = {
             "type": "array",
             "items": {"type": "string"},
         },
-        "full_recipe": {"type": "string"},
+        "full_recipe": {
+            "type": "object",
+            "properties": {
+                "ingredients": {
+                    "type": "array",
+                    "description": "Short ingredient list",
+                    "items": {"type": "string"},
+                },
+                "steps": {
+                    "type": "array",
+                    "description": "numbered cooking steps",
+                    "items": {"type": "string"},
+                }
+            }
+        },
     },
     "required": ["dish_name", "spoken_summary", "full_recipe"],
 }
@@ -123,6 +137,58 @@ class RecipeNode(object):
     def _normalize_match_text(self, text):
         cleaned = re.sub(r"[^a-z0-9\s]", " ", str(text).lower())
         return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _format_full_recipe(self, full_recipe):
+        """Format a structured full_recipe dict into a display string.
+
+        Ingredients are listed with bullet points and steps with
+        sequential numbers.
+
+        Parameters
+        ----------
+        full_recipe : dict or str
+            Structured recipe containing ``ingredients`` and ``steps``
+            lists, or a plain string for backward compatibility.
+
+        Returns
+        -------
+        str
+            Formatted recipe text.
+        """
+        if isinstance(full_recipe, str):
+            return full_recipe.strip()
+
+        ingredients = []
+        steps = []
+        if isinstance(full_recipe, dict):
+            raw_ingredients = full_recipe.get("ingredients", [])
+            raw_steps = full_recipe.get("steps", [])
+            if isinstance(raw_ingredients, list):
+                ingredients = [
+                    str(item).strip()
+                    for item in raw_ingredients
+                    if str(item).strip()
+                ]
+            if isinstance(raw_steps, list):
+                steps = [
+                    str(item).strip()
+                    for item in raw_steps
+                    if str(item).strip()
+                ]
+
+        lines = []
+        if ingredients:
+            lines.append("Ingredients:")
+            for item in ingredients:
+                lines.append("• {0}".format(item))
+            lines.append("")
+
+        if steps:
+            lines.append("Steps:")
+            for idx, step in enumerate(steps, start=1):
+                lines.append("{0}. {1}".format(idx, step))
+
+        return "\n".join(lines).strip()
 
     def _find_missing_detected_ingredients(
         self,
@@ -261,7 +327,9 @@ class RecipeNode(object):
             "- \"dish_name\": short dish name\n"
             "- \"spoken_summary\": 1-2 sentence summary\n"
             "- \"missing_ingredients\": list of extra ingredients needed (empty list if none)\n"
-            "- \"full_recipe\": short ingredient list and numbered cooking steps"
+            "- \"full_recipe\": a JSON object containing 2 properties:\n"
+            "    - \"ingredients\": short ingredient list; and\n"
+            "    - \"steps\": numbered cooking steps"
         ).format(
             health_lines=health_lines,
             allergy_lines=allergy_lines,
@@ -515,7 +583,9 @@ class RecipeNode(object):
 
             dish_name = str(recipe_data.get("dish_name", "")).strip()
             spoken_summary = str(recipe_data.get("spoken_summary", "")).strip()
-            full_recipe_text = str(recipe_data.get("full_recipe", "")).strip()
+            full_recipe_text = self._format_full_recipe(
+                recipe_data.get("full_recipe", "")
+            )
             missing_ingredients_raw = recipe_data.get("missing_ingredients", [])
             if isinstance(missing_ingredients_raw, list):
                 missing_ingredients_text = "\n".join(
