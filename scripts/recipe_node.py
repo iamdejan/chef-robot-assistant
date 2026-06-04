@@ -49,12 +49,12 @@ RECIPE_RESPONSE_SCHEMA = {
             "properties": {
                 "ingredients": {
                     "type": "array",
-                    "description": "Short ingredient list",
+                    "description": "Short ingredient list. Make sure only to return ASCII characters.",
                     "items": {"type": "string"},
                 },
                 "steps": {
                     "type": "array",
-                    "description": "numbered cooking steps",
+                    "description": "Cooking steps, without numbering. Ensure that the sequence is correct. Make sure only to return ASCII characters.",
                     "items": {"type": "string"},
                 }
             }
@@ -328,8 +328,8 @@ class RecipeNode(object):
             "- \"spoken_summary\": 1-2 sentence summary\n"
             "- \"missing_ingredients\": list of extra ingredients needed (empty list if none)\n"
             "- \"full_recipe\": a JSON object containing 2 properties:\n"
-            "    - \"ingredients\": short ingredient list; and\n"
-            "    - \"steps\": numbered cooking steps"
+            "    - \"ingredients\": short ingredient list. Make sure only to return ASCII characters; and\n"
+            "    - \"steps\": cooking steps, without numbering. Ensure that the sequence is correct. Make sure only to return ASCII characters."
         ).format(
             health_lines=health_lines,
             allergy_lines=allergy_lines,
