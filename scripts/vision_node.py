@@ -358,8 +358,8 @@ class VisionNode(object):
 
         return (
             "You are the vision module for a ROS Noetic chef robot. "
-            "Detect visible raw food ingredients in the image. "
-            "Return only real edible ingredients that are clearly visible. "
+            "Detect visible raw food ingredients, cooking oils, ketchup, and sauce in the image. "
+            "Return only real edible ingredients, cooking oils, ketchup, and sauce that are clearly visible. "
             "Do not return plates, bowls, hands, table surfaces, packaging, utensils, background objects, or cooked dish names. "
             "Use simple lowercase singular class names such as egg, tomato, onion, garlic, chicken, fish, rice, bread, carrot, potato, lettuce, cucumber, beef, cheese, milk, lemon, chili, mushroom. "
             "For each ingredient, estimate a bounding box in pixel coordinates for the full image size {0}x{1}. "
