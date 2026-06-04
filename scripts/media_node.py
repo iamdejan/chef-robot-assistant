@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
+import io
 import os
 import shutil
 import subprocess
-import textwrap
 import time
 
 import numpy as np
@@ -15,12 +15,17 @@ from chef_robot_assistant.srv import SpeakText
 from chef_robot_assistant.srv import SpeakTextResponse
 
 try:
-    import cv2
+    import tkinter as tk
+    from tkinter import ttk
+    from PIL import Image, ImageTk
 except ImportError as exc:
-    cv2 = None
-    CV2_IMPORT_ERROR = str(exc)
+    tk = None
+    ttk = None
+    Image = None
+    ImageTk = None
+    TK_IMPORT_ERROR = str(exc)
 else:
-    CV2_IMPORT_ERROR = ""
+    TK_IMPORT_ERROR = ""
 
 try:
     from huggingface_hub import InferenceClient
@@ -83,6 +88,14 @@ class MediaNode(object):
         self.recipe_window_dirty = False
         self.image_window_dirty = False
 
+        # Tkinter UI attributes
+        self.root = None
+        self.recipe_window = None
+        self.image_window = None
+        self.recipe_text_widget = None
+        self.image_label = None
+        self.current_photo_image = None  # Keep reference to prevent garbage collection
+
         self._initialize_display_support()
         os.makedirs(self.image_output_dir, exist_ok=True)
 
@@ -103,8 +116,8 @@ class MediaNode(object):
         if not self.display_window_enabled:
             return
 
-        if CV2_IMPORT_ERROR:
-            rospy.logwarn("Display disabled because cv2 is unavailable: %s", CV2_IMPORT_ERROR)
+        if TK_IMPORT_ERROR:
+            rospy.logwarn("Display disabled because tkinter/PIL is unavailable: %s", TK_IMPORT_ERROR)
             self.display_window_enabled = False
             return
 
@@ -114,15 +127,63 @@ class MediaNode(object):
             return
 
         try:
-            cv2.namedWindow(self.recipe_window_name, cv2.WINDOW_NORMAL)
-            cv2.resizeWindow(
-                self.recipe_window_name,
-                self.display_window_width,
-                self.display_window_height,
+            self.root = tk.Tk()
+            self.root.withdraw()  # Hide the root window
+
+            # Create recipe window
+            self.recipe_window = tk.Toplevel(self.root)
+            self.recipe_window.title(self.recipe_window_name)
+            self.recipe_window.geometry(f"{self.display_window_width}x{self.display_window_height}")
+            self.recipe_window.protocol("WM_DELETE_WINDOW", self._on_recipe_window_close)
+
+            # Create a frame with scrollbar for recipe content
+            recipe_frame = ttk.Frame(self.recipe_window)
+            recipe_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+            self.recipe_text_widget = tk.Text(
+                recipe_frame,
+                wrap=tk.WORD,
+                font=("DejaVu Sans", 11),
+                bg="#f5f5f5",
+                fg="#1e1e1e",
+                padx=10,
+                pady=10,
             )
-        except cv2.error as exc:
-            rospy.logwarn("Display disabled because OpenCV window init failed: %s", exc)
+            self.recipe_text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            recipe_scrollbar = ttk.Scrollbar(recipe_frame, orient=tk.VERTICAL, command=self.recipe_text_widget.yview)
+            recipe_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            self.recipe_text_widget.config(yscrollcommand=recipe_scrollbar.set)
+
+            # Configure text tags for styling
+            self.recipe_text_widget.tag_configure("title", font=("DejaVu Sans", 16, "bold"), foreground="#1e5eb4")
+            self.recipe_text_widget.tag_configure("section", font=("DejaVu Sans", 12, "bold"), foreground="#1e5eb4")
+            self.recipe_text_widget.tag_configure("body", font=("DejaVu Sans", 11), foreground="#1e1e1e")
+            self.recipe_text_widget.tag_configure("accent", font=("DejaVu Sans", 11, "bold"), foreground="#1e5eb4")
+            self.recipe_text_widget.tag_configure("warning", font=("DejaVu Sans", 11), foreground="#b40000")
+            self.recipe_text_widget.tag_configure("stale", font=("DejaVu Sans", 10, "italic"), foreground="#888888")
+
+            # Create image window
+            self.image_window = tk.Toplevel(self.root)
+            self.image_window.title(self.image_window_name)
+            self.image_window.geometry(f"{self.display_window_width}x{self.display_window_height}")
+            self.image_window.protocol("WM_DELETE_WINDOW", self._on_image_window_close)
+
+            self.image_label = ttk.Label(self.image_window)
+            self.image_label.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+
+            # Initial update to show windows
+            self.root.update_idletasks()
+
+        except Exception as exc:
+            rospy.logwarn("Display disabled because tkinter window init failed: %s", exc)
             self.display_window_enabled = False
+
+    def _on_recipe_window_close(self):
+        self.recipe_window.withdraw()
+
+    def _on_image_window_close(self):
+        self.image_window.withdraw()
 
     def _dependency_error_message(self):
         errors = []
@@ -132,8 +193,8 @@ class MediaNode(object):
             )
         if DOTENV_IMPORT_ERROR:
             errors.append("python-dotenv import failed: {0}".format(DOTENV_IMPORT_ERROR))
-        if CV2_IMPORT_ERROR:
-            errors.append("opencv-python import failed: {0}".format(CV2_IMPORT_ERROR))
+        if TK_IMPORT_ERROR:
+            errors.append("tkinter/PIL import failed: {0}".format(TK_IMPORT_ERROR))
         return "; ".join(errors)
 
     def _read_hf_token(self):
@@ -184,30 +245,7 @@ class MediaNode(object):
             "missing_ingredients": missing_ingredients,
         }
 
-    def _wrap_text(self, text, width_chars):
-        lines = []
-        for raw_line in str(text).splitlines() or [""]:
-            wrapped = textwrap.wrap(
-                raw_line.strip(),
-                width=max(20, width_chars),
-                break_long_words=False,
-                break_on_hyphens=False,
-            )
-            if wrapped:
-                lines.extend(wrapped)
-            else:
-                lines.append("")
-        return lines
-
-    def _render_recipe_canvas(self, spoken_text):
-        canvas = np.full(
-            (self.display_window_height, self.display_window_width, 3),
-            245,
-            dtype=np.uint8,
-        )
-        color = (30, 30, 30)
-        accent = (30, 90, 180)
-
+    def _render_recipe_content(self, spoken_text):
         recipe_data = self._load_recipe_display_data()
         if recipe_data is not None:
             self.current_recipe_data = recipe_data
@@ -216,169 +254,78 @@ class MediaNode(object):
             recipe_data = self.current_recipe_data
             self.current_recipe_is_stale = recipe_data is not None
 
-        y = 50
-        margin = 40
-        max_width_chars = max(50, int((self.display_window_width - margin * 2) / 16))
+        # Build content for tkinter Text widget
+        self.recipe_text_widget.config(state=tk.NORMAL)
+        self.recipe_text_widget.delete(1.0, tk.END)
 
-        app_title = "Chef Robot Assistant"
-        dish_title = "No dish generated yet"
-        if recipe_data and recipe_data.get("dish_name"):
-            dish_title = recipe_data["dish_name"]
+        # App title
+        self.recipe_text_widget.insert(tk.END, "Chef Robot Assistant\n\n", "title")
 
-        cv2.putText(
-            canvas,
-            app_title,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 45
-
+        # Spoken text
         if spoken_text:
-            cv2.putText(
-                canvas,
-                "Robot Says",
-                (margin, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                accent,
-                2,
-                cv2.LINE_AA,
-            )
-            y += 34
-            for line in self._wrap_text(spoken_text, max_width_chars):
-                cv2.putText(
-                    canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    color,
-                    1,
-                    cv2.LINE_AA,
-                )
-                y += 28
-            y += 20
+            self.recipe_text_widget.insert(tk.END, "Robot Says\n", "section")
+            self.recipe_text_widget.insert(tk.END, spoken_text + "\n\n", "body")
 
         if self.current_recipe_is_stale and recipe_data:
-            cv2.putText(
-                canvas,
-                "Previous Dish and Recipe",
-                (margin, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.75,
-                (0, 0, 180),
-                2,
-                cv2.LINE_AA,
-            )
-            y += 36
+            self.recipe_text_widget.insert(tk.END, "Previous Dish and Recipe\n", "warning")
+            self.recipe_text_widget.insert(tk.END, "\n")
 
         title_label = "Dish Name"
         if self.current_recipe_is_stale and recipe_data:
             title_label = "Previous Dish Name"
 
-        cv2.putText(
-            canvas,
-            title_label,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 34
+        self.recipe_text_widget.insert(tk.END, f"{title_label}\n", "section")
 
-        cv2.putText(
-            canvas,
-            dish_title,
-            (margin, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            accent,
-            2,
-            cv2.LINE_AA,
-        )
-        y += 45
+        dish_title = "No dish generated yet"
+        if recipe_data and recipe_data.get("dish_name"):
+            dish_title = recipe_data["dish_name"]
+
+        self.recipe_text_widget.insert(tk.END, f"{dish_title}\n\n", "accent")
 
         if recipe_data and recipe_data.get("missing_ingredients"):
-            missing_text = "Need to buy: {0}".format(
-                ", ".join(recipe_data["missing_ingredients"])
-            )
-            for line in self._wrap_text(missing_text, max_width_chars):
-                cv2.putText(
-                    canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.65,
-                    (0, 0, 180),
-                    2,
-                    cv2.LINE_AA,
-                )
-                y += 28
-            y += 10
+            missing_text = f"Need to buy: {', '.join(recipe_data['missing_ingredients'])}"
+            self.recipe_text_widget.insert(tk.END, f"{missing_text}\n\n", "warning")
 
         if recipe_data and recipe_data.get("full_recipe_text"):
             recipe_label = "Recipe"
             if self.current_recipe_is_stale:
                 recipe_label = "Previous Recipe"
-            cv2.putText(
-                canvas,
-                recipe_label,
-                (margin, y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                accent,
-                2,
-                cv2.LINE_AA,
-            )
-            y += 36
-            for line in self._wrap_text(recipe_data["full_recipe_text"], max_width_chars):
-                if y > self.display_window_height - 20:
-                    break
-                cv2.putText(
-                    canvas,
-                    line,
-                    (margin, y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    color,
-                    1,
-                    cv2.LINE_AA,
-                )
-                y += 24
+            self.recipe_text_widget.insert(tk.END, f"{recipe_label}\n", "section")
+            self.recipe_text_widget.insert(tk.END, f"{recipe_data['full_recipe_text']}\n", "body")
 
-        return canvas
+        if self.current_recipe_is_stale:
+            self.recipe_text_widget.insert(tk.END, "\n(Showing previous recipe - new recipe not yet available)", "stale")
+
+        self.recipe_text_widget.config(state=tk.DISABLED)
+        self.recipe_text_widget.see(1.0)
 
     def _refresh_recipe_window(self):
-        if not self.display_window_enabled:
+        if not self.display_window_enabled or self.recipe_text_widget is None:
             return
 
-        canvas = self._render_recipe_canvas(self.current_spoken_text)
         try:
-            cv2.imshow(self.recipe_window_name, canvas)
-            cv2.waitKey(1)
-        except cv2.error as exc:
+            self._render_recipe_content(self.current_spoken_text)
+            self.root.update_idletasks()
+        except Exception as exc:
             rospy.logwarn("Disabling display after recipe window failure: %s", exc)
             self.display_window_enabled = False
 
     def _refresh_image_window(self):
-        if not self.display_window_enabled or self.current_image is None:
+        if not self.display_window_enabled or self.current_image is None or self.image_label is None:
             return
 
         try:
-            cv2.namedWindow(self.image_window_name, cv2.WINDOW_NORMAL)
-            cv2.imshow(self.image_window_name, self.current_image)
-            cv2.waitKey(1)
-        except cv2.error as exc:
+            # The image is stored as RGB numpy array from PIL
+            pil_image = Image.fromarray(self.current_image)
+            photo = ImageTk.PhotoImage(pil_image)
+            self.current_photo_image = photo  # Keep reference
+            self.image_label.config(image=photo)
+            self.root.update_idletasks()
+        except Exception as exc:
             rospy.logwarn("Failed to show generated image window: %s", exc)
 
     def _pump_windows(self):
-        if not self.display_window_enabled:
+        if not self.display_window_enabled or self.root is None:
             return
 
         if self.recipe_window_dirty:
@@ -390,8 +337,8 @@ class MediaNode(object):
             self.image_window_dirty = False
 
         try:
-            cv2.waitKey(1)
-        except cv2.error:
+            self.root.update()
+        except Exception:
             pass
 
     def _speak_text(self, text):
@@ -451,8 +398,6 @@ class MediaNode(object):
             return b"", "Hugging Face image request returned no image"
 
         try:
-            import io
-
             image_buffer = io.BytesIO()
             image.save(image_buffer, format="PNG")
         except Exception as exc:
@@ -465,11 +410,14 @@ class MediaNode(object):
         return image_bytes, ""
 
     def _decode_image_bytes(self, image_bytes):
-        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-        if image is None:
-            raise RuntimeError("generated image payload could not be decoded")
-        return image
+        try:
+            pil_image = Image.open(io.BytesIO(image_bytes))
+            pil_image.load()  # Force load to verify integrity
+            # Convert to RGB numpy array for storage
+            image_array = np.array(pil_image.convert("RGB"))
+            return image_array
+        except Exception as exc:
+            raise RuntimeError("generated image payload could not be decoded: {0}".format(exc))
 
     def _save_generated_image(self, image_bytes, dish_name):
         safe_name = "".join(
