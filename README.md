@@ -13,7 +13,6 @@ Before setting up this repository, ensure the following requirements are met:
 | ROS Distro | Noetic |
 | Operating System | Ubuntu 20.04.x |
 | Python | 3.8.x |
-| Python package manager | uv |
 
 ### Setup Instructions
 
