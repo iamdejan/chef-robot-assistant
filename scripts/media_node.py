@@ -163,16 +163,7 @@ class MediaNode(object):
             self.recipe_text_widget.tag_configure("warning", font=("DejaVu Sans", 11), foreground="#b40000")
             self.recipe_text_widget.tag_configure("stale", font=("DejaVu Sans", 10, "italic"), foreground="#888888")
 
-            # Create image window
-            self.image_window = tk.Toplevel(self.root)
-            self.image_window.title(self.image_window_name)
-            self.image_window.geometry(f"{self.display_window_width}x{self.display_window_height}")
-            self.image_window.protocol("WM_DELETE_WINDOW", self._on_image_window_close)
-
-            self.image_label = ttk.Label(self.image_window)
-            self.image_label.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
-
-            # Initial update to show windows
+            # Initial update to show recipe window
             self.root.update_idletasks()
 
         except Exception as exc:
@@ -184,6 +175,29 @@ class MediaNode(object):
 
     def _on_image_window_close(self):
         self.image_window.withdraw()
+
+    def _ensure_image_window(self):
+        """Create the image display window on demand if it does not exist.
+
+        Returns
+        -------
+        bool
+            True if the window exists or was created successfully, False otherwise.
+        """
+        if self.image_window is not None and self.image_label is not None:
+            return True
+        try:
+            self.image_window = tk.Toplevel(self.root)
+            self.image_window.title(self.image_window_name)
+            self.image_window.geometry(f"{self.display_window_width}x{self.display_window_height}")
+            self.image_window.protocol("WM_DELETE_WINDOW", self._on_image_window_close)
+
+            self.image_label = ttk.Label(self.image_window)
+            self.image_label.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+            return True
+        except Exception as exc:
+            rospy.logwarn("Failed to create image window: %s", exc)
+            return False
 
     def _dependency_error_message(self):
         errors = []
@@ -311,10 +325,15 @@ class MediaNode(object):
             self.display_window_enabled = False
 
     def _refresh_image_window(self):
-        if not self.display_window_enabled or self.current_image is None or self.image_label is None:
+        if not self.display_window_enabled or self.current_image is None:
+            return
+
+        if not self._ensure_image_window():
             return
 
         try:
+            # Ensure window is visible
+            self.image_window.deiconify()
             # The image is stored as RGB numpy array from PIL
             pil_image = Image.fromarray(self.current_image)
             photo = ImageTk.PhotoImage(pil_image)
