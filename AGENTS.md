@@ -2,9 +2,9 @@
 
 ## Context of the Project
 
-OS: Ubuntu 20.04
-Python: 3.8.10
-ROS version: ROS Noetic Ninjemys
+- OS: Ubuntu 20.04
+- Python: 3.8.10
+- ROS version: ROS Noetic Ninjemys
 
 ## Code Generation
 
